@@ -1,0 +1,26 @@
+{
+ "v": 1,
+ "users": [
+  {
+   "id": "jeremy",
+   "v": 1,
+   "salt": "CUPcMOUI0bleF/qnygNggA==",
+   "iv": "OKmCQdKBY6s6zjMQ",
+   "ct": "zfHtFLaTuSIfR42BZrcmgL8fwnvmFgxJyePwFZXrSa+Z7HBsCDGEaLznoPmzZQGoTj4ji2i0QCcpg58Sj/++i50ScTY5+eQZd562Hw0EDz+lkoMGDKNzOEl3J48LkT6MKLPiLqtTTPWhid7z734K+ULYyhYUePSqKonKI9qI7FguY6g95/mxk4LWVJ0l9nYBk9CpC4QCZg9v0fk="
+  },
+  {
+   "id": "testeur1",
+   "v": 1,
+   "salt": "lEYT/3gqabvrkr6cMMpdsA==",
+   "iv": "HjgqYoOXtuCCme9m",
+   "ct": "fLj3KfrE0lLbPTBra2IjhJgQZs9hCElcTqj/cYrwcM6e1RTAcI/Jw+Nvff0/pZrBcd8lieSdadOqQwLEQS8RyjWMp5QK6y5SZmUDgJ8iX+Z48Do/+qsJGXlV47WUNWs5hO9O/9sJX2AF7cfZu/5qCx+PoCOOY9lJ6CboGKL2ZhB+SxWq/5NOAPuwK3wOId/p0mGY9tsSPthHUZw="
+  },
+  {
+   "id": "testeur2",
+   "v": 1,
+   "salt": "mXBMRFl34xNeLd/LPlrj5A==",
+   "iv": "szfUcZCSnYZaJ9Tz",
+   "ct": "0E6qg5X1UPuWSzoqYD+Hgw3KSXJijPu/W4L91WQcewG024gMGSbDavQrP2nKUo4+5i/yhYOkseMdFQguLi393LL1gnfpPMFJnS1a23pMftl2Ydsg3zXrpTIUEIUzqEse8AjsyWLsfCM2Lv7QKqXdrlYkFH+w8qwLyiawbJfz5SZIEsOGgUfIbFnA+jJWSMeQZbrepcZCeHtwKLQ="
+  }
+ ]
+}
