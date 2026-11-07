@@ -68,6 +68,50 @@
     if (last && last.s === status && now - Date.parse(last.d) < 120000) return;
     h.visits = (h.visits || []).concat([{ d: new Date(now).toISOString(), by: team, s: status }]);
   }
+  // Identifiant stable pour une adresse importée : deux appareils qui importent la même
+  // adresse obtiennent le même id, la fusion ne crée donc pas de doublon
+  function addrId(street, number) {
+    var str = String(street).toLowerCase() + '|' + String(number).toLowerCase(), h = 5381;
+    for (var i = 0; i < str.length; i++) h = ((h * 33) ^ str.charCodeAt(i)) >>> 0;
+    return 'a' + h.toString(36) + str.length.toString(36);
+  }
+  function addrKey(h) {
+    return String(h.street).toLowerCase().trim() + '|' + String(h.number).toLowerCase().trim() + '|' + String(h.unit || '').toLowerCase().trim();
+  }
+  function rank(h) {
+    return [h.status !== 'todo' ? 1 : 0, (h.visits || []).length, h.pay ? 1 : 0, h.updated || '', h.id];
+  }
+  function better(a, b) {
+    var ra = rank(a), rb = rank(b);
+    for (var i = 0; i < ra.length; i++) { if (ra[i] > rb[i]) return true; if (ra[i] < rb[i]) return false; }
+    return false;
+  }
+  // Fusionne les fiches qui désignent la même adresse (même rue, numéro, logement).
+  // Retourne le nombre de fiches supprimées. Le choix du gagnant est déterministe :
+  // tous les appareils gardent la même fiche.
+  function dedupe() {
+    var groups = {}, removed = 0;
+    state.houses.forEach(function (h) { (groups[addrKey(h)] = groups[addrKey(h)] || []).push(h); });
+    Object.keys(groups).forEach(function (k) {
+      var g = groups[k];
+      if (g.length < 2 || !g[0].street || !g[0].number) return;   // adresses incomplètes : on ne touche pas
+      var win = g.reduce(function (a, b) { return better(b, a) ? b : a; });
+      g.forEach(function (h) {
+        if (h === win) return;
+        win.visits = unionVisits(win.visits, h.visits);
+        if (win.lat == null && h.lat != null) { win.lat = h.lat; win.lng = h.lng; }
+        if (!win.note && h.note) win.note = h.note;
+        if (!win.pay && h.pay) { ['pay', 'amount', 'donor', 'receipt', 'email', 'paid_on', 'paid_by'].forEach(function (f) { win[f] = h[f]; }); }
+        if (!isDeleted(h.id)) state.deleted.push(h.id);
+        removed++;
+      });
+      if (removed) win.updated = new Date().toISOString();
+    });
+    if (removed) {
+      state.houses = state.houses.filter(function (h) { return !isDeleted(h.id); });
+    }
+    return removed;
+  }
   function quartier(street) { return (T.quartierOf && T.quartierOf(street)) || 'Autres rues'; }
 
   T.store = {
@@ -174,7 +218,7 @@
           if (did) placed++; else skipped++;
           return;
         }
-        var h = { id: T.uid(), street: a.street, number: String(a.number), unit: '', lat: a.lat, lng: a.lng,
+        var h = { id: addrId(a.street, a.number), street: a.street, number: String(a.number), unit: '', lat: a.lat, lng: a.lng,
           status: 'todo', note: '', team: '', updated: now };
         state.houses.push(h);
         idx[key] = [h];
@@ -329,7 +373,9 @@
         var n = dc[t], c = state.caisse[t];
         if (n && (!c || (n.updated || '') > (c.updated || ''))) { state.caisse[t] = n; cch++; }
       });
-      if (added || updated || removed || cch) save(!!fromRemote); else persist();
+      var dup = dedupe();
+      if (dup) save(false);            // les suppressions de doublons doivent être partagées
+      else if (added || updated || removed || cch) save(!!fromRemote); else persist();
       return { ok: true, added: added, updated: updated, removed: removed,
         msg: added + ' ajoutée(s), ' + updated + ' mise(s) à jour, ' + removed + ' supprimée(s)' };
     },
@@ -339,6 +385,7 @@
       if (!d || d.app !== 'bfs-tournee') return { ok: false, msg: 'Ce fichier n\'est pas une sauvegarde de l\'appli' };
       return T.store.merge(d, false);
     },
+    dedupe: function () { var n = dedupe(); if (n) save(); return n; },
     reset: function () {
       state.houses.forEach(function (h) { if (!isDeleted(h.id)) state.deleted.push(h.id); });
       state.houses = [];

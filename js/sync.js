@@ -44,7 +44,7 @@
   function httpError(res, what) {
     if (res.status === 401) return new Error('Accès expiré : déconnectez-vous puis reconnectez-vous (ou prévenez l\'administrateur)');
     if (res.status === 403) return new Error('Accès refusé ou limite GitHub atteinte, nouvel essai plus tard');
-    if (res.status === 404) return new Error('Dépôt de données introuvable : prévenez l\'administrateur');
+    if (res.status === 404) return new Error('Dépôt de données introuvable (« ' + cfg.repo + ' ») : le jeton n\'y a pas accès ou le nom est faux');
     return new Error(what + ' : erreur ' + res.status);
   }
 

@@ -249,8 +249,7 @@
       }
       if (i === null) return;
       if (e.target.checked) sel[i] = 1; else delete sel[i];
-      renderQuartiers();
-      renderSummary();
+      render();
     });
     T.$('#impAll').addEventListener('click', function () { visible().forEach(function (o) { sel[o.i] = 1; }); render(); });
     T.$('#impNone').addEventListener('click', function () { visible().forEach(function (o) { delete sel[o.i]; }); render(); });

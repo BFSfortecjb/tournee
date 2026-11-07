@@ -324,6 +324,7 @@
     T.list.init();
     T.imp.init();
     T.finance.init();
+    T.store.dedupe();               // nettoie d'éventuels doublons déjà présents
     T.sync.init();
     refresh();
     if (T.sync.isOn()) hideLogin(); else showLogin();
