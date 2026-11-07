@@ -1,0 +1,239 @@
+/*!
+ * Tournée calendriers — app.js (navigation, connexion, fiche habitation, bilan)
+ * © Jérémy Bizeul / Vigie-lance — Tous droits réservés
+ */
+(function () {
+  'use strict';
+  var T = window.Tour;
+  var cur = null, token = 0, lastStreet = '';
+
+  /* ---------- en-tête ---------- */
+  function renderStats() {
+    var s = T.store.stats();
+    T.$('#statsBar').innerHTML = T.STATUS_ORDER.map(function (k) {
+      return '<span><i class="dot s-' + k + '"></i>' + s[k] + ' ' + T.STATUS[k].label.toLowerCase() + '</span>';
+    }).join('');
+    T.$('#teamBadge').textContent = T.sync.user() ? T.sync.user() : '';
+  }
+
+  /* ---------- onglets ---------- */
+  function showTab(name) {
+    T.$$('.view').forEach(function (v) { v.classList.toggle('active', v.id === 'view-' + name); });
+    T.$$('.tabs button').forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-tab') === name); });
+    if (name === 'map') T.map.refresh();
+    if (name !== 'map') T.map.stopAdd();
+  }
+
+  /* ---------- connexion ---------- */
+  function showLogin(msg) {
+    T.$('#login').classList.remove('hidden');
+    T.$('#loginErr').textContent = msg || '';
+  }
+  function hideLogin() { T.$('#login').classList.add('hidden'); }
+
+  function bindLogin() {
+    T.$('#loginForm').addEventListener('submit', function (e) {
+      e.preventDefault();
+      var id = T.auth.normId(T.$('#lgId').value), pw = T.$('#lgPw').value;
+      var btn = T.$('#lgBtn'), err = T.$('#loginErr');
+      if (!id || !pw) { err.textContent = 'Saisissez votre identifiant et votre mot de passe'; return; }
+      btn.disabled = true; btn.textContent = 'Connexion…'; err.textContent = '';
+      fetch('users.json?t=' + Date.now(), { cache: 'no-store' })
+        .then(function (r) {
+          if (!r.ok) throw new Error('Fichier des comptes introuvable (users.json)');
+          return r.json();
+        })
+        .then(function (users) { return T.auth.login(users, id, pw); })
+        .then(function (payload) {
+          if (!payload || !payload.repo || !payload.token) throw new Error('Compte mal configuré, prévenez l\'administrateur');
+          T.$('#lgPw').value = '';
+          hideLogin();
+          T.store.setTeam(id);
+          T.sync.signIn(payload, id);
+          refresh();
+          T.toast('Bonjour ' + id);
+        })
+        .catch(function (ex) {
+          err.textContent = ex && ex.message === 'BAD' ? 'Identifiant ou mot de passe incorrect'
+            : (ex && ex.message === 'Failed to fetch' ? 'Réseau indisponible' : (ex && ex.message) || 'Connexion impossible');
+        })
+        .then(function () { btn.disabled = false; btn.textContent = 'Se connecter'; });
+    });
+  }
+
+  /* ---------- fiche habitation ---------- */
+  function buildStatusBtns() {
+    T.$('#statusBtns').innerHTML = T.STATUS_ORDER.map(function (k) {
+      return '<button type="button" data-s="' + k + '" class="s-' + k + '">' + T.STATUS[k].label + '</button>';
+    }).join('');
+    T.$('#statusBtns').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-s]');
+      if (b) commit(b.getAttribute('data-s'));
+    });
+  }
+
+  function openSheet(id, opts) {
+    var h = id ? T.store.get(id) : null;
+    if (id && !h) return;
+    cur = { id: id || null, lat: opts && opts.lat, lng: opts && opts.lng };
+    var my = ++token;
+    T.$('#sheetTitle').textContent = h ? 'Modifier l\'habitation' : 'Nouvelle habitation';
+    T.$('#fStreet').value = h ? h.street : '';
+    T.$('#fNumber').value = h ? h.number : '';
+    T.$('#fNote').value = h ? h.note : '';
+    T.$('#streetList').innerHTML = T.store.streets().map(function (s) { return '<option value="' + T.esc(s) + '">'; }).join('');
+    T.$$('#statusBtns button').forEach(function (b) {
+      b.classList.toggle('cur', !!h && b.getAttribute('data-s') === h.status);
+    });
+    T.$('#sheetExtra').classList.toggle('hidden', !h);
+    T.$('#sheet').classList.remove('hidden');
+
+    if (!h) {
+      // Nouvelle habitation : on propose la rue et le numéro d'après la carte
+      T.map.reverse(cur.lat, cur.lng).then(function (r) {
+        if (token !== my || cur.id) return;
+        if (!T.$('#fStreet').value) T.$('#fStreet').value = r.street || lastStreet;
+        if (!T.$('#fNumber').value) T.$('#fNumber').value = r.number;
+      });
+    }
+  }
+
+  function closeSheet() {
+    T.$('#sheet').classList.add('hidden');
+    cur = null; token++;
+  }
+
+  function commit(status) {
+    if (!cur) return;
+    var street = T.$('#fStreet').value.trim();
+    var number = T.$('#fNumber').value.trim();
+    var note = T.$('#fNote').value.trim();
+    if (!street && !number) { T.toast('Indiquez au moins une rue ou un numéro'); return; }
+    if (cur.id) {
+      T.store.update(cur.id, { street: street, number: number, note: note, status: status });
+    } else {
+      T.store.add({ street: street, number: number, note: note, status: status, lat: cur.lat, lng: cur.lng });
+    }
+    lastStreet = street;
+    closeSheet();
+    T.toast('Enregistré : ' + T.STATUS[status].label);
+  }
+
+  /* ---------- bilan ---------- */
+  function buildBilan() {
+    T.$('#bilanBody').innerHTML =
+      '<div class="grid" id="kpiBox"></div>' +
+      '<div class="card"><h3>Avancement</h3><div class="bar" id="barBox"></div><small id="barTxt" class="hint"></small></div>' +
+      '<div class="card"><h3>Par équipe</h3><div id="teamBox"></div></div>' +
+      '<div class="card"><h3>Compte</h3>' +
+        '<p id="accountTxt" style="margin:0 0 8px"></p>' +
+        '<div class="btn-col"><button id="btnSyNow" class="btn-sec" type="button">Synchroniser maintenant</button>' +
+        '<button id="btnLogout" class="btn-sec" type="button">Se déconnecter</button></div>' +
+        '<p id="syncStatus" class="hint"></p></div>' +
+      '<div class="card"><h3>Sauvegarde</h3><div class="btn-col">' +
+        '<button id="btnJson" class="btn-sec" type="button">Exporter (JSON)</button>' +
+        '<button id="btnCsv" class="btn-sec" type="button">Exporter pour Excel (CSV)</button>' +
+        '<button id="btnImport" class="btn-sec" type="button">Importer une sauvegarde</button>' +
+        '<button id="btnReset" class="btn-danger" type="button">Tout effacer</button></div></div>' +
+      '<p class="hint" style="text-align:center">Version ' + T.VERSION + ' · © Jérémy Bizeul / Vigie-lance</p>';
+
+    T.$('#btnSyNow').addEventListener('click', function () {
+      if (!T.sync.isOn()) { T.toast('Non connecté'); return; }
+      T.sync.now();
+    });
+    T.$('#btnLogout').addEventListener('click', function () {
+      if (!confirm('Se déconnecter ? Les modifications non envoyées restent sur cet appareil.')) return;
+      T.sync.signOut();
+      T.store.setTeam('');
+      showTab('map');
+      showLogin();
+      refresh();
+    });
+
+    T.$('#btnJson').addEventListener('click', function () {
+      T.download('tournee-' + new Date().toISOString().slice(0, 10) + '.json', T.store.exportJSON(), 'application/json');
+    });
+    T.$('#btnCsv').addEventListener('click', function () {
+      T.download('tournee-' + new Date().toISOString().slice(0, 10) + '.csv', T.store.exportCSV(), 'text/csv;charset=utf-8');
+    });
+    T.$('#btnImport').addEventListener('click', function () { T.$('#fileImport').click(); });
+    T.$('#fileImport').addEventListener('change', function () {
+      var f = this.files && this.files[0];
+      var input = this;
+      if (!f) return;
+      var r = new FileReader();
+      r.onload = function () {
+        var res = T.store.importJSON(String(r.result));
+        T.toast(res.ok ? 'Import : ' + res.msg : res.msg);
+        input.value = '';
+      };
+      r.readAsText(f);
+    });
+    T.$('#btnReset').addEventListener('click', function () {
+      var msg = 'Effacer toutes les habitations ?' + (T.sync.isOn() ? '\nElles seront aussi effacées chez les autres testeurs.' : '');
+      if (confirm(msg)) { T.store.reset(); T.toast('Tout est effacé'); }
+    });
+  }
+
+  function renderBilan() {
+    var s = T.store.stats();
+    var kpis = [['Habitations', s.total, '#1d2024']].concat(T.STATUS_ORDER.map(function (k) { return [T.STATUS[k].label, s[k], T.STATUS[k].color]; }));
+    T.$('#kpiBox').innerHTML = kpis.map(function (k) {
+      return '<div class="kpi" style="border-left-color:' + k[2] + '"><b>' + k[1] + '</b><span>' + T.esc(k[0]) + '</span></div>';
+    }).join('');
+    T.$('#barBox').innerHTML = s.total ? T.STATUS_ORDER.map(function (k) {
+      return '<i style="width:' + (100 * s[k] / s.total) + '%;background:' + T.STATUS[k].color + '"></i>';
+    }).join('') : '';
+    var done = s.total ? Math.round(100 * (s.total - s.todo) / s.total) : 0;
+    T.$('#barTxt').textContent = done + ' % des habitations visitées';
+    var bt = T.store.byTeam(), keys = Object.keys(bt);
+    T.$('#teamBox').innerHTML = keys.length
+      ? '<table><tr><th>Équipe</th><th>Passé</th><th>À repasser</th><th>Refus</th></tr>' +
+        keys.sort().map(function (k) {
+          return '<tr><td>' + T.esc(k) + '</td><td>' + bt[k].passe + '</td><td>' + bt[k].repasser + '</td><td>' + bt[k].refus + '</td></tr>';
+        }).join('') + '</table>'
+      : '<p class="hint">Rien de saisi pour l\'instant.</p>';
+    T.$('#accountTxt').textContent = T.sync.user() ? 'Connecté : ' + T.sync.user() : 'Non connecté';
+  }
+
+  function refresh() { renderStats(); renderBilan(); }
+
+  /* ---------- démarrage ---------- */
+  function init() {
+    T.$$('.tabs button').forEach(function (b) {
+      b.addEventListener('click', function () { showTab(b.getAttribute('data-tab')); });
+    });
+    buildStatusBtns();
+    buildBilan();
+    bindLogin();
+    T.$('#btnClose').addEventListener('click', closeSheet);
+    T.$('#sheet').addEventListener('click', function (e) { if (e.target === this) closeSheet(); });
+
+    T.$('#btnGoMap').addEventListener('click', function () {
+      var h = cur && T.store.get(cur.id);
+      if (!h) return;
+      closeSheet(); showTab('map');
+      if (h.lat == null) T.toast('Pas encore placée sur la carte : utilisez « Placer / déplacer »');
+      else T.map.focus(h);
+    });
+    T.$('#btnPlace').addEventListener('click', function () {
+      var id = cur && cur.id;
+      if (!id) return;
+      closeSheet(); showTab('map'); T.map.startPlacing(id);
+    });
+    T.$('#btnDelete').addEventListener('click', function () {
+      var id = cur && cur.id;
+      if (id && confirm('Supprimer cette habitation ?')) { T.store.remove(id); closeSheet(); T.toast('Supprimée'); }
+    });
+
+    T.bus.on('change', refresh);
+    T.map.init();
+    T.list.init();
+    T.sync.init();
+    refresh();
+    if (T.sync.isOn()) hideLogin(); else showLogin();
+  }
+
+  T.app = { openSheet: openSheet, showTab: showTab };
+  init();
+})();

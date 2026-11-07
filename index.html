@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="author" content="Jérémy Bizeul / Vigie-lance">
+<meta name="copyright" content="© Jérémy Bizeul / Vigie-lance">
+<meta name="theme-color" content="#b3261e">
+<title>Tournée calendriers</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<!--
+  Tournée calendriers — version test locale
+  © Jérémy Bizeul / Vigie-lance — Tous droits réservés
+-->
+
+<header>
+  <div class="head-top">
+    <h1>Tournée calendriers</h1>
+    <span id="teamBadge" class="badge"></span>
+  </div>
+  <div id="statsBar" class="stats-bar"></div>
+</header>
+
+<main>
+  <!-- CARTE -->
+  <section id="view-map" class="view active">
+    <div id="map"></div>
+    <div id="addBanner" class="banner hidden">Mode ajout : touchez la carte à l'emplacement de l'habitation</div>
+    <div id="placeBanner" class="banner hidden">Touchez la carte pour placer l'habitation <button id="btnCancelPlace" class="mini">Annuler</button></div>
+    <form id="searchForm" class="map-search">
+      <input id="searchInput" type="search" placeholder="Chercher une adresse…" autocomplete="off">
+      <button type="submit">OK</button>
+    </form>
+    <div class="fab-col">
+      <button id="btnLocate" class="fab" title="Ma position">◎</button>
+      <button id="btnAdd" class="fab fab-main" title="Ajouter une habitation">＋</button>
+    </div>
+  </section>
+
+  <!-- LISTE -->
+  <section id="view-list" class="view">
+    <div class="toolbar">
+      <div id="filters" class="chips"></div>
+      <button id="btnToggleRange" class="btn-sec">+ Ajouter une rue</button>
+    </div>
+    <form id="rangeForm" class="card hidden">
+      <h3>Ajouter une rue (liste de numéros)</h3>
+      <label>Rue<input id="rgStreet" type="text" required placeholder="Rue des Lilas"></label>
+      <div class="row">
+        <label>Du n°<input id="rgFrom" type="number" min="1" required value="1"></label>
+        <label>Au n°<input id="rgTo" type="number" min="1" required value="20"></label>
+      </div>
+      <label>Numéros
+        <select id="rgStep">
+          <option value="all">Tous</option>
+          <option value="even">Pairs seulement</option>
+          <option value="odd">Impairs seulement</option>
+        </select>
+      </label>
+      <button type="submit" class="btn-main">Créer les habitations</button>
+      <p class="hint">Elles apparaissent dans la liste. Vous pourrez les placer sur la carte ensuite (facultatif).</p>
+    </form>
+    <div id="listBody"></div>
+  </section>
+
+  <!-- BILAN -->
+  <section id="view-bilan" class="view">
+    <div id="bilanBody"></div>
+  </section>
+</main>
+
+<nav class="tabs">
+  <button data-tab="map" class="active"><span>🗺️</span>Carte</button>
+  <button data-tab="list"><span>📋</span>Liste</button>
+  <button data-tab="bilan"><span>📊</span>Bilan</button>
+</nav>
+
+<!-- FEUILLE HABITATION -->
+<div id="sheet" class="sheet hidden" role="dialog" aria-modal="true">
+  <div class="sheet-inner">
+    <div class="sheet-head">
+      <h2 id="sheetTitle">Habitation</h2>
+      <button id="btnClose" class="x" aria-label="Fermer">✕</button>
+    </div>
+    <div class="row">
+      <label class="grow">Rue<input id="fStreet" type="text" list="streetList" autocomplete="off"></label>
+      <label class="num">N°<input id="fNumber" type="text" inputmode="text" autocomplete="off"></label>
+    </div>
+    <datalist id="streetList"></datalist>
+    <label>Note (facultatif)<input id="fNote" type="text" placeholder="Ex : revenir après 18h, chien…" autocomplete="off"></label>
+    <p class="sheet-label">Statut — touchez pour enregistrer</p>
+    <div id="statusBtns" class="status-btns"></div>
+    <div id="sheetExtra" class="sheet-extra">
+      <button id="btnGoMap" class="btn-sec">Voir sur la carte</button>
+      <button id="btnPlace" class="btn-sec">Placer / déplacer</button>
+      <button id="btnDelete" class="btn-danger">Supprimer</button>
+    </div>
+  </div>
+</div>
+
+<!-- CONNEXION -->
+<div id="login" class="login">
+  <form id="loginForm" class="login-card" autocomplete="on">
+    <h2>Tournée calendriers</h2>
+    <p class="hint">Connectez-vous avec l'identifiant et le mot de passe qui vous ont été donnés.</p>
+    <label>Identifiant<input id="lgId" type="text" name="username" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false"></label>
+    <label>Mot de passe<input id="lgPw" type="password" name="password" autocomplete="current-password"></label>
+    <p id="loginErr" class="login-err"></p>
+    <button id="lgBtn" type="submit" class="btn-main">Se connecter</button>
+    <p class="hint" style="text-align:center">© Jérémy Bizeul / Vigie-lance</p>
+  </form>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+<input id="fileImport" type="file" accept="application/json,.json" class="hidden">
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="js/debug.js"></script>
+<script src="js/core.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/store.js"></script>
+<script src="js/sync.js"></script>
+<script src="js/map.js"></script>
+<script src="js/list.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
