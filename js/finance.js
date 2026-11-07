@@ -1,5 +1,5 @@
 /*!
- * Tournée calendriers — finance.js (onglet Dons : bilan, caisse, reçus)
+ * Tournée calendriers — finance.js (onglet Comptage : en tournée, ponctuel, à rendre)
  * Les montants viennent des fiches habitations ; le comptage de caisse reprend celui du tableur de la tournée.
  * © Jérémy Bizeul / Vigie-lance — Tous droits réservés
  */
@@ -7,7 +7,9 @@
   'use strict';
   var T = window.Tour;
   var ESP = [200, 100, 50, 20, 10, 5, 2, 1, 0.5, 0.2, 0.1, 0.05, 0.02, 0.01];
-  var group = 'team', caisseTeam = '', caisseDay = '';
+  var group = 'team', caisseTeam = '', caisseDay = '', panel = 'tournee';
+  try { panel = localStorage.getItem('bfs_tournee_panel') || 'tournee'; } catch (e) { panel = 'tournee'; }
+  if (['tournee', 'ponctuel', 'rendre'].indexOf(panel) < 0) panel = 'tournee';
   var fmt = function (n) { return T.money.fmt(n); };
 
   function active() { return T.$('#view-dons').classList.contains('active'); }
@@ -155,16 +157,32 @@
     }).join('') + '</table><p class="hint">Cochez chaque ligne quand le nombre de chèques en main est bon (corrigez la quantité si besoin).</p>';
   }
 
-  // Historique de tous les comptages (récents en premier), avec suppression
+  // Historique de tous les comptages (récents en premier) : touchez une ligne pour voir la quantité de chaque valeur
+  var openCount = {};
+  function detailRows(map) {
+    return Object.keys(map).sort(function (a, b) { return parseFloat(b.replace('_', '.')) - parseFloat(a.replace('_', '.')); }).map(function (k) {
+      var d = parseFloat(k.replace('_', '.'));
+      return '<tr><td>' + fmt(d) + '</td><td class="n">× ' + map[k] + '</td><td class="n">' + fmt(d * map[k]) + '</td></tr>';
+    }).join('');
+  }
   function renderCountHist() {
     var box = T.$('#countHist');
     if (!box) return;
     var l = T.store.countings();
     box.innerHTML = l.length ? '<table><tr><th>Quand</th><th>Qui / jour</th><th>Esp.</th><th>Chq.</th><th>Total</th><th></th></tr>' + l.map(function (c) {
-      var dt = c.at ? new Date(c.at).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
-      return '<tr><td>' + dt + '</td><td>' + T.esc(c.who) + '<br><small>' + dayLabel(c.day).replace(' (aujourd\'hui)', '') + '</small></td><td class="n">' + fmt(c.tEsp) + '</td><td class="n">' + fmt(c.tChq) + '</td><td class="n"><b>' + fmt(c.tEsp + c.tChq) + '</b></td>' +
-        '<td><button type="button" class="btn-danger" data-delcount="' + T.esc(c.key) + '">✕</button></td></tr>';
-    }).join('') + '</table>' : '<p class="hint">Aucun comptage enregistré.</p>';
+      var dt = c.at ? new Date(c.at).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—', op = !!openCount[c.key];
+      var det = '';
+      if (op) {
+        var e = detailRows(c.esp), q = detailRows(c.chq);
+        det = '<tr><td colspan="6" style="background:#f6f7f9">' +
+          (e ? '<b>Espèces</b><table class="caisse">' + e + '</table>' : '') +
+          (q ? '<b>Chèques</b><table class="caisse">' + q + '</table>' : '') +
+          (c.chqOther ? '<p class="hint">Autres chèques : ' + fmt(c.chqOther) + '</p>' : '') +
+          (!e && !q && !c.chqOther ? '<p class="hint">Comptage vide.</p>' : '') + '</td></tr>';
+      }
+      return '<tr data-toggle="' + T.esc(c.key) + '" style="cursor:pointer"><td>' + (op ? '▾ ' : '▸ ') + dt + '</td><td>' + T.esc(c.who) + '<br><small>' + dayLabel(c.day).replace(' (aujourd\'hui)', '') + '</small></td><td class="n">' + fmt(c.tEsp) + '</td><td class="n">' + fmt(c.tChq) + '</td><td class="n"><b>' + fmt(c.tEsp + c.tChq) + '</b></td>' +
+        '<td><button type="button" class="btn-danger" data-delcount="' + T.esc(c.key) + '">✕</button></td></tr>' + det;
+    }).join('') + '</table><p class="hint">Touchez une ligne pour voir la quantité de chaque coupure et de chaque montant de chèque.</p>' : '<p class="hint">Aucun comptage enregistré.</p>';
   }
 
   function buildCaisse() {
@@ -231,20 +249,27 @@
   }
 
   /* ---------- démarrage ---------- */
+  function showPanel(name) {
+    panel = name;
+    try { localStorage.setItem('bfs_tournee_panel', name); } catch (e) { /* sans stockage : on garde en mémoire */ }
+    T.$$('#finPanels .chip').forEach(function (c) { c.classList.toggle('on', c.getAttribute('data-p') === name); });
+    T.$$('#donsBody .fpan').forEach(function (x) { x.classList.toggle('hidden', x.getAttribute('data-p') !== name); });
+  }
+
   function build() {
     T.$('#donsBody').innerHTML =
+      '<div id="finPanels" class="chips" style="margin-bottom:10px"><button class="chip on" data-p="tournee">🚶 En tournée</button>' +
+        '<button class="chip" data-p="ponctuel">🧮 Ponctuel</button><button class="chip" data-p="rendre">📋 À rendre</button></div>' +
+      '<section class="fpan" data-p="tournee">' +
       '<div class="grid" id="finKpi"></div>' +
       '<div class="card"><h3>Bilan</h3>' +
         '<div id="finGroups" class="chips" style="margin-bottom:8px"><button class="chip on" data-g="team">Par équipe</button>' +
         '<button class="chip" data-g="quartier">Par quartier</button><button class="chip" data-g="day">Par jour</button><button class="chip" data-g="souche">Par souche</button></div>' +
         '<div id="finTable" style="overflow-x:auto"></div></div>' +
-      '<div class="card"><h3>Indemnisation des distributeurs</h3>' +
-        '<form id="indForm"><div class="row"><label class="grow">€ par calendrier distribué<input id="indRate" type="text" inputmode="decimal"></label>' +
-        '<label class="grow">Forfait (€)<input id="indFixe" type="text" inputmode="decimal"></label>' +
-        '<label class="grow">Nb de personnes<input id="indNb" type="number" min="1" inputmode="numeric"></label></div>' +
-        '<button class="btn-main" type="submit">Enregistrer les paramètres</button></form>' +
-        '<div id="indRes" style="margin-top:10px"></div></div>' +
-      '<div class="card"><h3>Comparaison avec les années passées</h3><div id="histoTable" style="overflow-x:auto"></div></div>' +
+      '<div class="card"><h3>Reçus et factures demandés</h3><p id="rcTxt" class="hint" style="margin-top:0"></p><div id="rcList"></div>' +
+        '<div class="btn-col" style="margin-top:8px"><button id="btnRcCsv" class="btn-sec" type="button">Exporter les demandes de reçu (CSV)</button></div></div>' +
+      '</section>' +
+      '<section class="fpan hidden" data-p="ponctuel">' +
       '<div class="card"><h3>Caisse</h3>' +
         '<div class="row"><label class="grow">Personne<select id="caisseTeam"></select></label>' +
         '<label class="grow">Jour<select id="caisseDay"></select></label></div>' +
@@ -258,16 +283,33 @@
         '<label class="grow">Calendriers rendus (non distribués)<input id="stRendu" type="number" min="0" inputmode="numeric"></label></div>' +
         '<button id="btnStockSave" class="btn-main" type="submit">Enregistrer</button></form>' +
         '<div id="stockTable" style="margin-top:10px;overflow-x:auto"></div>' +
-        '<button id="btnRestit" class="btn-sec" type="button" style="margin-top:8px;width:100%">Ouvrir le bordereau de restitution des calendriers</button></div>' +
+        '</div>' +
+      '</section>' +
+      '<section class="fpan hidden" data-p="rendre">' +
       '<div class="card"><h3>Bordereau commun — ' + T.esc(T.TOURNEE.titre) + '</h3>' +
         '<p class="hint" style="margin-top:0">Une feuille à imprimer (ou enregistrer en PDF) avec les dons et les caisses comptées de tout le monde, par jour et par quartier, avec cases de signature.</p>' +
         '<div class="btn-col"><button id="btnBordereau" class="btn-main" type="button">Ouvrir le bordereau</button>' +
         '<button id="btnBordCsv" class="btn-sec" type="button">Exporter le tableau (CSV)</button></div></div>' +
-      '<div class="card"><h3>Reçus et factures demandés</h3><p id="rcTxt" class="hint" style="margin-top:0"></p><div id="rcList"></div>' +
-        '<div class="btn-col" style="margin-top:8px"><button id="btnRcCsv" class="btn-sec" type="button">Exporter les demandes de reçu (CSV)</button>' +
-        '<button id="btnDonsCsv" class="btn-sec" type="button">Exporter tous les dons (CSV)</button></div></div>' +
+      '<div class="card"><h3>Bordereau de restitution des calendriers</h3>' +
+        '<p class="hint" style="margin-top:0">Calendriers reçus, vendus, donnés, gardés et rendus par personne, avec signatures.</p>' +
+        '<button id="btnRestit" class="btn-main" type="button" style="width:100%">Ouvrir le bordereau de restitution</button></div>' +
+      '<div class="card"><h3>Indemnisation des distributeurs</h3>' +
+        '<form id="indForm"><div class="row"><label class="grow">€ par calendrier distribué<input id="indRate" type="text" inputmode="decimal"></label>' +
+        '<label class="grow">Forfait (€)<input id="indFixe" type="text" inputmode="decimal"></label>' +
+        '<label class="grow">Nb de personnes<input id="indNb" type="number" min="1" inputmode="numeric"></label></div>' +
+        '<button class="btn-main" type="submit">Enregistrer les paramètres</button></form>' +
+        '<div id="indRes" style="margin-top:10px"></div></div>' +
+      '<div class="card"><h3>Comparaison avec les années passées</h3><div id="histoTable" style="overflow-x:auto"></div></div>' +
+      '<div class="card"><h3>Exports</h3><button id="btnDonsCsv" class="btn-sec" type="button" style="width:100%">Exporter tous les dons (CSV)</button></div>' +
+      '</section>' +
       '<p class="hint">Les noms et montants sont des données personnelles : à ne garder que le temps de la tournée, puis à supprimer.</p>';
 
+
+    T.$('#finPanels').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-p]');
+      if (b) showPanel(b.getAttribute('data-p'));
+    });
+    showPanel(panel);
     T.$('#finGroups').addEventListener('click', function (e) {
       var b = e.target.closest('[data-g]');
       if (b) { group = b.getAttribute('data-g'); renderSummary(); }
@@ -276,7 +318,12 @@
     T.$('#caisseDay').addEventListener('change', function () { caisseDay = this.value; buildCaisse(); });
     T.$('#countHist').addEventListener('click', function (e) {
       var b = e.target.closest('[data-delcount]');
-      if (!b || !confirm('Supprimer ce comptage ? Les totaux de la caisse seront recalculés.')) return;
+      if (!b) {
+        var r = e.target.closest('[data-toggle]');
+        if (r) { var k = r.getAttribute('data-toggle'); openCount[k] = !openCount[k]; renderCountHist(); }
+        return;
+      }
+      if (!confirm('Supprimer ce comptage ? Les totaux de la caisse seront recalculés.')) return;
       T.store.delCaisse(b.getAttribute('data-delcount'));
       buildCaisse();
     });
