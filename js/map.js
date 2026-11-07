@@ -16,7 +16,8 @@
     if (keys.length === 1) return keys[0];
     if (set.repasser || set.todo) return 'repasser';
     if (set.passe) return 'passe';
-    return 'refus';
+    if (set.refus) return 'refus';
+    return 'inhabite';
   }
 
   function icon(group) {

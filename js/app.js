@@ -313,9 +313,9 @@
       : '<p class="hint">Aucun passage enregistré.</p>';
     var bt = T.store.byTeam(), keys = Object.keys(bt);
     T.$('#teamBox').innerHTML = keys.length
-      ? '<table><tr><th>Équipe</th><th>Passé</th><th>À repasser</th><th>Refus</th></tr>' +
+      ? '<table><tr><th>Équipe</th><th>Passé</th><th>À repasser</th><th>Refus</th><th>Inhabité</th></tr>' +
         keys.sort().map(function (k) {
-          return '<tr><td>' + T.esc(k) + '</td><td>' + bt[k].passe + '</td><td>' + bt[k].repasser + '</td><td>' + bt[k].refus + '</td></tr>';
+          return '<tr><td>' + T.esc(k) + '</td><td>' + bt[k].passe + '</td><td>' + bt[k].repasser + '</td><td>' + bt[k].refus + '</td><td>' + bt[k].inhabite + '</td></tr>';
         }).join('') + '</table>'
       : '<p class="hint">Rien de saisi pour l\'instant.</p>';
     T.$('#accountTxt').textContent = T.sync.user() ? 'Connecté : ' + T.sync.user() : 'Non connecté';

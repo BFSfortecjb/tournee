@@ -7,7 +7,6 @@
   'use strict';
   var T = window.Tour;
   var ESP = [200, 100, 50, 20, 10, 5, 2, 1, 0.5, 0.2, 0.1, 0.05, 0.02, 0.01];
-  var CHQ = [150, 100, 75, 50, 40, 35, 30, 25, 20, 15, 12, 10, 8, 5];
   var group = 'team', caisseTeam = '', caisseDay = '';
   var fmt = function (n) { return T.money.fmt(n); };
 
@@ -142,6 +141,20 @@
       }).join('') + '</table>';
   }
 
+  // Chèques : pas de saisie à refaire. On liste ceux saisis ce jour-là (par montant) et on confirme chaque quantité.
+  function chequeTable(saved) {
+    var seen = T.store.chequesDay(caisseTeam, caisseDay), conf = saved && saved.chq || {};
+    var keys = Object.keys(seen);
+    Object.keys(conf).forEach(function (k) { if (keys.indexOf(k) < 0) keys.push(k); });   // chèque confirmé puis modifié ou supprimé
+    keys.sort(function (a, b) { return parseFloat(b.replace('_', '.')) - parseFloat(a.replace('_', '.')); });
+    if (!keys.length) return '<table class="caisse"><tr><th>Chèques</th></tr><tr><td class="hint">Aucun chèque saisi ce jour-là.</td></tr></table>';
+    return '<table class="caisse"><tr><th>Chèques</th><th>Saisis</th><th>Quantité</th><th>Confirmé</th></tr>' + keys.map(function (k) {
+      var d = parseFloat(k.replace('_', '.')), n = seen[k] || 0, isConf = conf[k] != null, q = isConf ? conf[k] : n;
+      return '<tr><td>' + fmt(d) + '</td><td>' + n + '</td><td><input type="number" min="0" step="1" inputmode="numeric" class="cqc" data-d="' + k + '" value="' + q + '"></td>' +
+        '<td><input type="checkbox" class="cqk" data-d="' + k + '"' + (isConf ? ' checked' : '') + '></td></tr>';
+    }).join('') + '</table><p class="hint">Cochez chaque ligne quand le nombre de chèques en main est bon (corrigez la quantité si besoin).</p>';
+  }
+
   function buildCaisse() {
     var sel = T.$('#caisseTeam');
     var teams = teamList();
@@ -153,9 +166,7 @@
     if (!caisseTeam || teams.indexOf(caisseTeam) < 0) caisseTeam = teams.indexOf(T.store.team()) >= 0 ? T.store.team() : teams[0];
     sel.innerHTML = teams.map(function (t) { return '<option' + (t === caisseTeam ? ' selected' : '') + '>' + T.esc(t) + '</option>'; }).join('');
     var saved = T.store.getCaisse(caisseTeam, caisseDay);
-    T.$('#caisseBox').innerHTML = table('Espèces', ESP, 'esp', saved) + table('Chèques', CHQ, 'chq', saved) +
-      '<label>Autres chèques (montant total en €)<input id="chqOther" type="text" inputmode="decimal" value="' + (saved && saved.chqOther ? String(saved.chqOther).replace('.', ',') : '') + '"></label>' +
-      '<div id="caisseRes"></div>';
+    T.$('#caisseBox').innerHTML = table('Espèces', ESP, 'esp', saved) + chequeTable(saved) + '<div id="caisseRes"></div>';
     T.$('#caisseMsg').textContent = saved ? 'Dernier enregistrement : ' + new Date(saved.updated).toLocaleString('fr-FR') : 'Aucun comptage enregistré pour ce jour.';
     computeCaisse();
   }
@@ -165,10 +176,13 @@
     var out = { esp: {}, chq: {}, chqOther: 0 };
     T.$$('#caisseBox .cq').forEach(function (i) {
       var q = parseInt(i.value, 10);
-      if (q > 0) out[i.getAttribute('data-k')][key(i.getAttribute('data-d'))] = q;
+      if (q > 0) out.esp[key(i.getAttribute('data-d'))] = q;
     });
-    var o = T.money.parse(T.$('#chqOther').value || '0');
-    out.chqOther = isNaN(o) ? 0 : o;
+    T.$$('#caisseBox .cqk').forEach(function (c) {
+      if (!c.checked) return;
+      var k = c.getAttribute('data-d'), i = T.$('#caisseBox .cqc[data-d="' + k + '"]'), q = parseInt(i.value, 10);
+      if (q >= 0) out.chq[k] = q;
+    });
     return out;
   }
 
@@ -180,7 +194,10 @@
       var cell = T.$('[data-m="' + k + '-' + key(d) + '"]');
       if (cell) cell.textContent = q ? fmt(d * q) : '';
     });
-    counted.chq += Math.round(c.chqOther * 100);
+    Object.keys(c.chq).forEach(function (k) { counted.chq += Math.round(parseFloat(k.replace('_', '.')) * 100) * c.chq[k]; });
+    var seen = T.store.chequesDay(caisseTeam, caisseDay), todo = 0, diffq = 0;
+    Object.keys(seen).forEach(function (k) { if (c.chq[k] == null) todo++; });
+    Object.keys(c.chq).forEach(function (k) { if (c.chq[k] !== (seen[k] || 0)) diffq++; });
     var t = T.store.financeDay(caisseTeam, caisseDay);
     function line(label, cnt, exp) {
       var diff = r2(cnt / 100 - exp);
@@ -190,6 +207,8 @@
     T.$('#caisseRes').innerHTML = '<table><tr><th></th><th>Compté</th><th>Saisi</th><th>Écart</th></tr>' +
       line('Espèces', counted.esp, t.esp) + line('Chèques', counted.chq, t.chq) +
       line('Total', counted.esp + counted.chq, t.esp + t.chq) + '</table>' +
+      (todo ? '<p class="hint" style="color:#d6402f">' + todo + ' montant(s) de chèques pas encore confirmé(s).</p>' : '') +
+      (diffq ? '<p class="hint" style="color:#d6402f">Quantité confirmée différente du saisi sur ' + diffq + ' ligne(s).</p>' : '') +
       '<p class="hint">' + t.n + ' don(s) saisi(s) ce jour-là' + (t.gratuit ? ' dont ' + t.gratuit + ' gratuit(s)' : '') + '. Enveloppe attendue : ' + fmt(t.esp + t.chq) + '.</p>';
   }
 
@@ -237,6 +256,7 @@
     T.$('#caisseTeam').addEventListener('change', function () { caisseTeam = this.value; buildCaisse(); });
     T.$('#caisseDay').addEventListener('change', function () { caisseDay = this.value; buildCaisse(); });
     T.$('#caisseBox').addEventListener('input', computeCaisse);
+    T.$('#caisseBox').addEventListener('change', computeCaisse);
     T.$('#btnCaisseSave').addEventListener('click', function () {
       T.store.setCaisse(caisseTeam, caisseDay, readCaisse());
       T.toast('Comptage enregistré');
@@ -285,5 +305,5 @@
 
   function show() { renderSummary(); buildCaisse(); }
 
-  T.finance = { init: init, show: show, ESP: ESP, CHQ: CHQ };
+  T.finance = { init: init, show: show, ESP: ESP };
 })();

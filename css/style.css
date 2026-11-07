@@ -1,7 +1,7 @@
 /* Tournée calendriers — © Jérémy Bizeul / Vigie-lance */
 :root{
   --red:#b3261e; --ink:#1d2024; --mut:#6b7280; --bg:#f3f4f6; --card:#fff; --line:#e5e7eb;
-  --c-todo:#8a8f98; --c-passe:#2e9e4f; --c-repasser:#f0952b; --c-refus:#d6402f;
+  --c-todo:#8a8f98; --c-passe:#2e9e4f; --c-repasser:#f0952b; --c-refus:#d6402f; --c-inhabite:#7a4fb5;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;margin:0}
@@ -36,7 +36,7 @@ main{flex:1;min-height:0;position:relative}
 .mini{margin-left:6px;border:0;border-radius:6px;padding:3px 8px}
 .pin{width:28px;height:28px;border-radius:50%;color:#fff;font:700 11px/24px system-ui;text-align:center;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.45);overflow:hidden}
 .s-todo{background:var(--c-todo)} .s-passe{background:var(--c-passe)}
-.s-repasser{background:var(--c-repasser)} .s-refus{background:var(--c-refus)}
+.s-repasser{background:var(--c-repasser)} .s-refus{background:var(--c-refus)} .s-inhabite{background:var(--c-inhabite)}
 
 /* liste */
 .toolbar{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:8px}

@@ -261,7 +261,7 @@
         });
     },
     stats: function () {
-      var s = { total: state.houses.length, todo: 0, passe: 0, repasser: 0, refus: 0 };
+      var s = { total: state.houses.length, todo: 0, passe: 0, repasser: 0, refus: 0, inhabite: 0 };
       state.houses.forEach(function (h) { if (s[h.status] !== undefined) s[h.status]++; });
       return s;
     },
@@ -282,7 +282,7 @@
       state.houses.forEach(function (h) {
         if (h.status === 'todo') return;
         var k = h.team || '(sans équipe)';
-        out[k] = out[k] || { passe: 0, repasser: 0, refus: 0 };
+        out[k] = out[k] || { passe: 0, repasser: 0, refus: 0, inhabite: 0 };
         out[k][h.status]++;
       });
       return out;
@@ -409,6 +409,16 @@
         if (h.pay === 'esp') esp += cents(h); else chq += cents(h);
       });
       return { esp: esp / 100, chq: chq / 100, total: (esp + chq) / 100, n: n, gratuit: gratuit, cal: cal, kept: kept };
+    },
+    // Chèques saisis par une personne un jour donné : { 'montant': nombre }
+    chequesDay: function (team, day) {
+      var out = {};
+      state.houses.forEach(function (h) {
+        if (h.pay !== 'chq' || (h.paid_by || h.team || '(sans équipe)') !== team || h.paid_on !== day) return;
+        var k = String(Number(h.amount) || 0).replace('.', '_');
+        out[k] = (out[k] || 0) + 1;
+      });
+      return out;
     },
     // Total d'un comptage enregistré (en euros) : { esp, chq }
     caisseTotals: function (c) {

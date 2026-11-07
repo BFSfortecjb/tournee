@@ -9,15 +9,16 @@
   // Identité de la tournée (titre des exports et du bordereau)
   T.TOURNEE = { num: 5, titre: 'Tournée de calendriers n°5', commune: 'Bannalec' };
 
-  T.VERSION = '0.13-test';
+  T.VERSION = '0.15-test';
 
   T.STATUS = {
     todo:     { label: 'Pas visité', color: '#8a8f98' },
     passe:    { label: 'Passé',      color: '#2e9e4f' },
     repasser: { label: 'À repasser', color: '#f0952b' },
-    refus:    { label: 'Refus',      color: '#d6402f' }
+    refus:    { label: 'Refus',      color: '#d6402f' },
+    inhabite: { label: 'Inhabité',   color: '#7a4fb5' }
   };
-  T.STATUS_ORDER = ['passe', 'repasser', 'refus', 'todo'];
+  T.STATUS_ORDER = ['passe', 'repasser', 'refus', 'inhabite', 'todo'];
 
   T.$ = function (s, r) { return (r || document).querySelector(s); };
   T.$$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
