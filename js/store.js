@@ -295,6 +295,17 @@
       return out;
     },
 
+    // Avancement par secteur (toutes les habitations, y compris « pas visité »)
+    bySector: function () {
+      var out = {};
+      state.houses.forEach(function (h) {
+        var k = T.store.sectorOf(h.street) || 'Hors secteur';
+        out[k] = out[k] || { passe: 0, repasser: 0, refus: 0, inhabite: 0, todo: 0, total: 0 };
+        out[k][h.status]++; out[k].total++;
+      });
+      return out;
+    },
+
     /* ---------- argent ---------- */
     // Totaux des dons (en euros), globalement et par équipe / quartier / jour
     finance: function () {
@@ -313,13 +324,14 @@
           if (h.pay === 'esp') { b.esp += c; b.nesp++; } else { b.chq += c; b.nchq++; }
         }
       }
-      var out = { all: blank(), team: {}, quartier: {}, day: {}, souche: {} }, chqAmt = {};
+      var out = { all: blank(), team: {}, quartier: {}, sector: {}, day: {}, souche: {} }, chqAmt = {};
       state.houses.forEach(function (h) {
         if (!h.pay) return;
         var who = h.paid_by || h.team || '(sans équipe)';
         add(out.all, h);
         add(bucket(out.team, who), h);
         add(bucket(out.quartier, quartier(h.street)), h);
+        add(bucket(out.sector, T.store.sectorOf(h.street) || 'Hors secteur'), h);
         add(bucket(out.day, h.paid_on || '(sans date)'), h);
         if (h.pay === 'esp' || h.pay === 'chq') {
           add(bucket(out.souche, who + ' — ' + (h.souche ? 'souche ' + h.souche : 'sans n° de souche')), h);
@@ -331,8 +343,8 @@
         return { total: b.c / 100, esp: b.esp / 100, chq: b.chq / 100, gratuit: b.gratuit, n: b.n, sold: b.sold, gift: b.gift, cs: b.cs, kept: b.kept,
           cal: b.sold + b.gift + b.cs, nesp: b.nesp, nchq: b.nchq, nPaid: np, avg: np ? Math.round(b.c / np) / 100 : 0 };
       }
-      var res = { all: eur(out.all), team: {}, quartier: {}, day: {}, souche: {}, chqAmt: chqAmt };
-      ['team', 'quartier', 'day', 'souche'].forEach(function (g) {
+      var res = { all: eur(out.all), team: {}, quartier: {}, sector: {}, day: {}, souche: {}, chqAmt: chqAmt };
+      ['team', 'quartier', 'sector', 'day', 'souche'].forEach(function (g) {
         Object.keys(out[g]).forEach(function (k) { res[g][k] = eur(out[g][k]); });
       });
       return res;

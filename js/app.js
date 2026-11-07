@@ -243,6 +243,7 @@
       '<div class="grid" id="kpiBox"></div>' +
       '<div class="card"><h3>Avancement</h3><div class="bar" id="barBox"></div><small id="barTxt" class="hint"></small></div>' +
       '<div class="card"><h3>Par équipe</h3><div id="teamBox"></div></div>' +
+      '<div class="card"><h3>Par secteur</h3><div id="sectorBox2"></div></div>' +
       '<div class="card"><h3>Passages (nombre de visites)</h3><div id="visitBox"></div></div>' +
       '<div class="card"><h3>Compte</h3>' +
         '<p id="accountTxt" style="margin:0 0 8px"></p>' +
@@ -352,6 +353,14 @@
           return '<tr><td>' + T.esc(k) + '</td><td>' + bt[k].passe + '</td><td>' + bt[k].repasser + '</td><td>' + bt[k].refus + '</td><td>' + bt[k].inhabite + '</td></tr>';
         }).join('') + '</table>'
       : '<p class="hint">Rien de saisi pour l\'instant.</p>';
+    var bs = T.store.bySector(), sk = Object.keys(bs);
+    T.$('#sectorBox2').innerHTML = T.store.sectors().length && sk.length
+      ? '<table><tr><th>Secteur</th><th>Passé</th><th>À repasser</th><th>Refus</th><th>Inhab.</th><th>Reste</th></tr>' +
+        sk.sort(function (a, b) { return a === 'Hors secteur' ? 1 : b === 'Hors secteur' ? -1 : a.localeCompare(b, 'fr'); }).map(function (k) {
+          var x = bs[k];
+          return '<tr><td>' + T.esc(k) + ' <small>(' + (x.total - x.todo) + '/' + x.total + ')</small></td><td>' + x.passe + '</td><td>' + x.repasser + '</td><td>' + x.refus + '</td><td>' + x.inhabite + '</td><td>' + x.todo + '</td></tr>';
+        }).join('') + '</table>'
+      : '<p class="hint">Aucun secteur créé : Liste → Secteurs.</p>';
     T.$('#accountTxt').textContent = T.sync.user() ? 'Connecté : ' + T.sync.user() : 'Non connecté';
   }
 

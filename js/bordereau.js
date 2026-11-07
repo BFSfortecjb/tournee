@@ -119,6 +119,10 @@
       return '<tr><td>' + T.esc(k) + '</td><td class="n">' + b.cal + '</td><td class="n">' + fmt(b.esp) + '</td><td class="n">' + fmt(b.chq) + '</td><td class="n"><b>' + fmt(b.total) + '</b></td></tr>';
     }).join('') || '<tr><td colspan="5">—</td></tr>';
 
+    var sRows = Object.keys(f.sector).sort(function (a, b) { return a.localeCompare(b, 'fr'); }).map(function (k) {
+      var b = f.sector[k];
+      return '<tr><td>' + T.esc(k) + '</td><td class="n">' + b.cal + '</td><td class="n">' + fmt(b.esp) + '</td><td class="n">' + fmt(b.chq) + '</td><td class="n"><b>' + fmt(b.total) + '</b></td></tr>';
+    }).join('');
     var gd = Math.round((totCompte - f.all.total) * 100) / 100;
     var allCounted = nCompte === B.rows.length && B.rows.length > 0;
     return wrap('Bordereau commun',
@@ -133,6 +137,7 @@
       '<tr><td>Écart global</td><td class="n">' + (allCounted ? (Math.abs(gd) < 0.005 ? '<span class="ok">OK</span>' : '<span class="ko">' + (gd > 0 ? '+' : '') + fmt(gd) + '</span>') : '<span class="nc">comptages incomplets</span>') + '</td></tr></table>' +
       '<h2>Par personne et par jour</h2><table><tr><th>Jour</th><th>Personne</th><th>Calendriers</th><th>Espèces saisies</th><th>Chèques saisis</th><th>Total saisi</th><th>Espèces comptées</th><th>Chèques comptés</th><th>Écart</th></tr>' + lines + '</table>' +
       '<h2>Par quartier</h2><table><tr><th>Quartier</th><th>Calendriers</th><th>Espèces</th><th>Chèques</th><th>Total</th></tr>' + qRows + '</table>' +
+      (T.store.sectors().length ? '<h2>Par secteur</h2><table><tr><th>Secteur</th><th>Calendriers</th><th>Espèces</th><th>Chèques</th><th>Total</th></tr>' + sRows + '</table>' : '') +
       '<h2>Par souche</h2>' + soucheTable(f) +
       '<h2>Calendriers : stock et restitution</h2>' + calTable(T.store.calendriers()) +
       '<h2>Indemnisation des distributeurs</h2>' + indTable() +

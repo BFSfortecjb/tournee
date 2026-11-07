@@ -16,7 +16,7 @@
   function r2(n) { return Math.round(n * 100) / 100; }
 
   /* ---------- bilan ---------- */
-  var GROUP_LABEL = { team: 'Équipe', quartier: 'Quartier', day: 'Jour', souche: 'Souche' };
+  var GROUP_LABEL = { team: 'Équipe', quartier: 'Quartier', sector: 'Secteur', day: 'Jour', souche: 'Souche' };
   function calTxt(b) {
     var x = [];
     if (b.gift) x.push(b.gift + ' donnés');
@@ -264,7 +264,7 @@
       '<div class="grid" id="finKpi"></div>' +
       '<div class="card"><h3>Bilan</h3>' +
         '<div id="finGroups" class="chips" style="margin-bottom:8px"><button class="chip on" data-g="team">Par équipe</button>' +
-        '<button class="chip" data-g="quartier">Par quartier</button><button class="chip" data-g="day">Par jour</button><button class="chip" data-g="souche">Par souche</button></div>' +
+        '<button class="chip" data-g="quartier">Par quartier</button><button class="chip" data-g="sector">Par secteur</button><button class="chip" data-g="day">Par jour</button><button class="chip" data-g="souche">Par souche</button></div>' +
         '<div id="finTable" style="overflow-x:auto"></div></div>' +
       '<div class="card"><h3>Reçus et factures demandés</h3><p id="rcTxt" class="hint" style="margin-top:0"></p><div id="rcList"></div>' +
         '<div class="btn-col" style="margin-top:8px"><button id="btnRcCsv" class="btn-sec" type="button">Exporter les demandes de reçu (CSV)</button></div></div>' +

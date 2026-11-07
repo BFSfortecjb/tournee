@@ -137,8 +137,8 @@ td.ok{color:var(--c-passe);font-weight:700} td.ko{color:var(--c-refus);font-weig
 .imp-range input{width:80px;margin:0;padding:5px 8px;font-size:14px}
 
 /* chien (bulles de la carte) */
-.ffb{left:auto;right:-9px;bottom:auto;top:-8px}
-.dogb{position:absolute;left:-9px;bottom:-8px;min-width:17px;height:17px;border-radius:50%;background:#fff;border:1px solid var(--line);font:normal 11px/15px system-ui;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,.4)}
+.ffb{left:auto;right:-8px;bottom:auto;top:-9px;width:17px;padding:0;overflow:hidden;white-space:nowrap;font-size:10px;line-height:15px;letter-spacing:-1px}
+.dogb{box-sizing:border-box;width:17px;overflow:hidden;position:absolute;left:-9px;bottom:-8px;min-width:17px;height:17px;border-radius:50%;background:#fff;border:1px solid var(--line);font:normal 11px/15px system-ui;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,.4)}
 
 /* liste repliable */
 .street-h{cursor:pointer;position:sticky;top:-10px;z-index:2;background:var(--bg);padding:8px 2px;margin:6px 0 2px;border-bottom:1px solid var(--line);align-items:center}
