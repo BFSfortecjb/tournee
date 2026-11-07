@@ -215,6 +215,10 @@
         '<div class="btn-col"><button id="btnSyNow" class="btn-sec" type="button">Synchroniser maintenant</button>' +
         '<button id="btnLogout" class="btn-sec" type="button">Se déconnecter</button></div>' +
         '<p id="syncStatus" class="hint"></p></div>' +
+      '<div class="card"><h3>Sauvegardes automatiques</h3>' +
+        '<p class="hint" style="margin-top:0">Une copie de toutes les données est envoyée toutes les heures dans le dépôt privé (un fichier par jour). Elle est suspendue si les données disparaissent d\'un coup.</p>' +
+        '<p id="bkInfo" class="hint"></p><div id="bkList"></div>' +
+        '<button id="btnBkList" class="btn-sec" type="button" style="width:100%">Voir les sauvegardes</button></div>' +
       '<div class="card"><h3>Sauvegarde</h3><div class="btn-col">' +
         '<button id="btnJson" class="btn-sec" type="button">Exporter (JSON)</button>' +
         '<button id="btnCsv" class="btn-sec" type="button">Exporter pour Excel (CSV)</button>' +
@@ -235,6 +239,30 @@
       refresh();
     });
 
+    T.$('#btnBkList').addEventListener('click', function () {
+      var box = T.$('#bkList');
+      if (!T.sync.isOn()) { T.toast('Non connecté'); return; }
+      box.innerHTML = '<p class="hint">Chargement…</p>';
+      T.sync.listBackups().then(function (l) {
+        box.innerHTML = l.length ? l.map(function (f) {
+          var d = f.name.replace('.json', '').split('-');
+          return '<div class="row-h"><div class="main"><b>' + (d.length === 3 ? d[2] + '/' + d[1] + '/' + d[0] : T.esc(f.name)) + '</b><small>' + Math.round(f.size / 1024) + ' Ko</small></div>' +
+            '<button class="btn-sec" type="button" data-bk="' + T.esc(f.name) + '" data-a="restore">Restaurer</button> ' +
+            '<button class="btn-sec" type="button" data-bk="' + T.esc(f.name) + '" data-a="dl">Télécharger</button></div>';
+        }).join('') : '<p class="hint">Aucune sauvegarde pour l\'instant (la première part après une synchronisation réussie).</p>';
+      }).catch(function (e) { box.innerHTML = '<p class="hint">' + T.esc(e.message || 'Erreur') + '</p>'; });
+    });
+    T.$('#bkList').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-bk]');
+      if (!b) return;
+      var name = b.getAttribute('data-bk'), act = b.getAttribute('data-a');
+      if (act === 'restore' && !confirm('Remettre les adresses de la sauvegarde du ' + name.replace('.json', '') + ' qui ont disparu ?\nRien d\'existant n\'est modifié ni supprimé.')) return;
+      T.sync.getBackup(name).then(function (txt) {
+        if (act === 'dl') { T.download('sauvegarde-tournee-' + name, txt, 'application/json'); return; }
+        var res = T.store.restoreMissing(JSON.parse(txt));
+        T.toast(res.msg);
+      }).catch(function (err) { T.toast(err.message || 'Erreur'); });
+    });
     T.$('#btnJson').addEventListener('click', function () {
       T.download('tournee-' + new Date().toISOString().slice(0, 10) + '.json', T.store.exportJSON(), 'application/json');
     });
@@ -261,6 +289,12 @@
   }
 
   function renderBilan() {
+    (function () {
+      var i = T.sync.backupInfo(), el = T.$('#bkInfo');
+      if (!el) return;
+      el.textContent = !T.sync.isOn() ? '' : i.skipped ? '⚠ Sauvegarde suspendue : le nombre d\'adresses a fortement baissé. La dernière bonne copie est conservée.' :
+        i.at ? 'Dernière sauvegarde de cet appareil : ' + new Date(i.at).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) + ' (' + i.n + ' adresses)' : 'Pas encore de sauvegarde envoyée depuis cet appareil.';
+    })();
     var s = T.store.stats();
     var kpis = [['Habitations', s.total, '#1d2024']].concat(T.STATUS_ORDER.map(function (k) { return [T.STATUS[k].label, s[k], T.STATUS[k].color]; }));
     T.$('#kpiBox').innerHTML = kpis.map(function (k) {

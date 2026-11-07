@@ -515,6 +515,22 @@
       if (!d || d.app !== 'bfs-tournee') return { ok: false, msg: 'Ce fichier n\'est pas une sauvegarde de l\'appli' };
       return T.store.merge(d, false);
     },
+    // Restauration non destructive : ajoute les adresses d'une sauvegarde qui n'existent plus ici
+    // (elles reçoivent un nouvel identifiant, car les anciens sont marqués supprimés chez tout le monde)
+    restoreMissing: function (d) {
+      if (!d || !Array.isArray(d.houses)) return { ok: false, msg: 'Sauvegarde non reconnue' };
+      var have = {}, n = 0, now = new Date().toISOString();
+      state.houses.forEach(function (h) { have[addrKey(h)] = 1; });
+      d.houses.forEach(function (o) {
+        if (!o || !T.STATUS[o.status] || have[addrKey(o)]) return;
+        var h = JSON.parse(JSON.stringify(o));
+        h.id = T.uid(); h.updated = now; have[addrKey(h)] = 1;
+        state.houses.push(h); n++;
+      });
+      T.store.merge({ houses: [], deleted: [], caisse: d.caisse, stock: d.stock, params: d.params }, false);
+      save();
+      return { ok: true, n: n, msg: n + ' adresse(s) restaurée(s)' };
+    },
     dedupe: function () { var n = dedupe(); if (n) save(); return n; },
     reset: function () {
       state.houses.forEach(function (h) { if (!isDeleted(h.id)) state.deleted.push(h.id); });

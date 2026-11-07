@@ -10,8 +10,10 @@
   var T = window.Tour;
   var CFG_KEY = 'bfs_tournee_sync_v2';
   var FILE = 'tournee-data.json';
+  var BK_DIR = 'sauvegardes';
+  var BK_EVERY = 3600000;           // une sauvegarde automatique par heure et par appareil, au plus
   var cfg = loadCfg();
-  var sha = null, busy = false, again = false, rev = 0, timer = null, lastOk = null, lastErr = '';
+  var sha = null, busy = false, again = false, rev = 0, timer = null, lastOk = null, lastErr = '', bkBusy = false;
 
   function loadCfg() {
     try { return JSON.parse(localStorage.getItem(CFG_KEY)) || {}; } catch (e) { return {}; }
@@ -93,6 +95,50 @@
     });
   }
 
+  /* ---------- sauvegardes automatiques : sauvegardes/AAAA-MM-JJ.json dans le dépôt de données ---------- */
+  function bkUrl(name) { return 'https://api.github.com/repos/' + cfg.repo + '/contents/' + BK_DIR + (name ? '/' + name : ''); }
+  function dayStr() { return T.store.today(); }
+  // Un fichier par jour, mis à jour au fil de la journée. On ne sauvegarde pas si les données ont fondu
+  // (par exemple après « Tout effacer ») : la dernière bonne copie reste alors intacte.
+  function backupMaybe() {
+    if (!enabled() || bkBusy) return;
+    var n = T.store.all().length, now = Date.now();
+    if (!n || (cfg.bkAt && now - cfg.bkAt < BK_EVERY)) return;
+    if (cfg.bkN && n < cfg.bkN * 0.5) { cfg.bkSkip = true; saveCfg(); return; }
+    bkBusy = true;
+    var name = dayStr() + '.json';
+    fetch(bkUrl(name) + '?t=' + now, { headers: headers(false), cache: 'no-store' }).then(function (res) {
+      if (res.status === 404) return null;
+      if (!res.ok) throw httpError(res, 'Sauvegarde');
+      return res.json().then(function (j) { return j.sha; });
+    }).then(function (oldSha) {
+      var body = { message: 'Sauvegarde automatique ' + name + ' (' + cfg.user + ')', content: enc(T.store.snapshot()) };
+      if (oldSha) body.sha = oldSha;
+      return fetch(bkUrl(name), { method: 'PUT', headers: headers(true), body: JSON.stringify(body) });
+    }).then(function (res) {
+      if (res && res.ok) { cfg.bkAt = now; cfg.bkN = n; cfg.bkSkip = false; saveCfg(); }
+    }).catch(function () { /* silencieux : on réessaiera à la prochaine synchro */ }).then(function () { bkBusy = false; });
+  }
+  function listBackups() {
+    return fetch(bkUrl() + '?t=' + Date.now(), { headers: headers(false), cache: 'no-store' }).then(function (res) {
+      if (res.status === 404) return [];
+      if (!res.ok) throw httpError(res, 'Liste des sauvegardes');
+      return res.json().then(function (l) {
+        return l.filter(function (f) { return /\.json$/.test(f.name); }).map(function (f) { return { name: f.name, size: f.size }; })
+          .sort(function (a, b) { return a.name < b.name ? 1 : -1; });
+      });
+    });
+  }
+  function getBackup(name) {
+    return fetch(bkUrl(name) + '?t=' + Date.now(), { headers: headers(false), cache: 'no-store' }).then(function (res) {
+      if (!res.ok) throw httpError(res, 'Lecture de la sauvegarde');
+      return res.json().then(function (j) {
+        if (!j.content) throw new Error('Sauvegarde trop grosse pour être lue ici');
+        return dec(j.content);
+      });
+    });
+  }
+
   function setStatus(kind, msg) {
     var el = T.$('#syncStatus');
     if (!el) return;
@@ -111,6 +157,7 @@
     setStatus('busy');
     return doSync(0).then(function () {
       lastOk = new Date(); lastErr = ''; setStatus('ok');
+      backupMaybe();
     }).catch(function (e) {
       lastErr = (e && e.message === 'Failed to fetch') ? 'Réseau indisponible' : (e && e.message) || 'Erreur';
       setStatus('err', lastErr);
@@ -141,7 +188,9 @@
     // Appelé après une connexion réussie : payload = { repo, token } déchiffré
     signIn: function (payload, user) {
       var keepDirty = cfg.user === user ? cfg.dirty : true;
+      var old = cfg;
       cfg = { repo: payload.repo, token: payload.token, user: user, dirty: keepDirty !== false };
+      if (old.user === user) { cfg.bkAt = old.bkAt; cfg.bkN = old.bkN; cfg.bkSkip = old.bkSkip; }
       rev++; saveCfg();
       sha = null; lastErr = '';
       return sync();
@@ -152,6 +201,9 @@
     },
     user: function () { return cfg.user || ''; },
     now: sync,
+    listBackups: function () { return enabled() ? listBackups() : Promise.reject(new Error('Non connecté')); },
+    getBackup: function (n) { return getBackup(n); },
+    backupInfo: function () { return { at: cfg.bkAt || 0, n: cfg.bkN || 0, skipped: !!cfg.bkSkip }; },
     isOn: enabled
   };
 })();
