@@ -6,7 +6,9 @@
 (function () {
   'use strict';
   var T = window.Tour;
-  var voies = [], sel = {}, kind = 'all', query = '', srcLabel = '';
+  var voies = [], sel = {}, kind = 'all', query = '', defaultSide = 'all', sides = {}, ranges = {};
+  var SIDE_ORDER = ['all', 'odd', 'even'];
+  var SIDE_LABEL = { all: 'Tous', odd: 'Impairs', even: 'Pairs' };
 
   function norm(s) {
     return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
@@ -15,6 +17,29 @@
     var m = String(n || '').match(/\d+/);
     return m ? parseInt(m[0], 10) : 1e9;
   }
+
+  // Garde les numéros pairs, impairs ou tous (« 12 bis » compte comme 12)
+  function bySide(items, side) {
+    if (side !== 'odd' && side !== 'even') return items;
+    var want = side === 'odd' ? 1 : 0;
+    return items.filter(function (a) {
+      var m = String(a.num).match(/\d+/);
+      return m && parseInt(m[0], 10) % 2 === want;
+    });
+  }
+  function sideOf(i) { return sides[i] || defaultSide; }
+  // Garde les numéros entre min et max (vide = pas de limite) ; « 12 bis » compte comme 12
+  function byRange(items, min, max) {
+    if (!min && !max) return items;
+    return items.filter(function (a) {
+      var m = String(a.num).match(/\d+/);
+      if (!m) return false;
+      var n = parseInt(m[0], 10);
+      return (!min || n >= min) && (!max || n <= max);
+    });
+  }
+  function rangeOf(i) { return ranges[i] || {}; }
+  function itemsOf(i) { var r = rangeOf(i); return byRange(bySide(voies[i].items, sideOf(i)), r.min, r.max); }
 
   // Lecture CSV (séparateur ; ou , détecté, guillemets gérés)
   function parseCSV(text) {
@@ -90,27 +115,61 @@
 
   function summary() {
     var nv = 0, na = 0;
-    voies.forEach(function (v, i) { if (sel[i]) { nv++; na += v.items.length; } });
+    voies.forEach(function (v, i) { if (sel[i]) { nv++; na += itemsOf(i).length; } });
     return { nv: nv, na: na };
   }
 
-  function render() {
-    var vis = visible();
-    T.$('#impList').innerHTML = vis.length ? vis.map(function (o) {
-      return '<label class="imp-row"><input type="checkbox" data-i="' + o.i + '"' + (sel[o.i] ? ' checked' : '') + '>' +
-        '<span>' + T.esc(o.v.name) + (o.v.ld ? ' <em>lieu-dit</em>' : '') + '</span><small>' + o.v.items.length + '</small></label>';
-    }).join('') : '<p class="empty">Aucune voie.</p>';
-    T.$$('#impKinds .chip').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-k') === kind); });
+  // Positions (dans voies) des voies d'un quartier présentes dans le fichier chargé
+  function quartierIdx(q) {
+    var names = {};
+    q.voies.forEach(function (v) { names[T.normName(v)] = 1; });
+    var out = [];
+    voies.forEach(function (v, i) { if (names[T.normName(v.name)]) out.push(i); });
+    return out;
+  }
+
+  function renderQuartiers() {
+    var html = '';
+    (T.QUARTIERS || []).forEach(function (q, qi) {
+      var idx = quartierIdx(q);
+      if (!idx.length) return;
+      var n = idx.reduce(function (s, i) { return s + itemsOf(i).length; }, 0);
+      var on = idx.every(function (i) { return sel[i]; });
+      html += '<button class="chip' + (on ? ' on' : '') + '" data-q="' + qi + '">' + T.esc(q.name) + ' (' + n + ')</button>';
+    });
+    T.$('#impQuartiers').innerHTML = html || '<small class="hint">Aucun quartier défini pour ce fichier.</small>';
+  }
+
+  function renderSummary() {
     var s = summary();
     T.$('#impSum').textContent = s.nv + ' voie(s) cochée(s) — ' + s.na + ' adresse(s)';
     T.$('#impGo').disabled = !s.na;
     T.$('#impGo').textContent = s.na ? 'Importer ' + s.na + ' adresse(s)' : 'Cochez des rues à importer';
   }
 
+  function render() {
+    renderQuartiers();
+    var box = T.$('#impList'), top = box.scrollTop;
+    var vis = visible();
+    box.innerHTML = vis.length ? vis.map(function (o) {
+      var s = sideOf(o.i);
+      return '<label class="imp-row"><input type="checkbox" data-i="' + o.i + '"' + (sel[o.i] ? ' checked' : '') + '>' +
+        '<span>' + T.esc(o.v.name) + (o.v.ld ? ' <em>lieu-dit</em>' : '') + '</span>' +
+        '<button type="button" class="side' + (s !== 'all' ? ' on' : '') + '" data-side="' + o.i + '">' + SIDE_LABEL[s] + '</button>' +
+        '<small>' + itemsOf(o.i).length + '</small></label>' +
+        (sel[o.i] ? '<div class="imp-range">du n° <input type="number" min="1" inputmode="numeric" data-rmin="' + o.i + '" value="' + (rangeOf(o.i).min || '') + '" placeholder="début">' +
+          ' au n° <input type="number" min="1" inputmode="numeric" data-rmax="' + o.i + '" value="' + (rangeOf(o.i).max || '') + '" placeholder="fin"></div>' : '');
+    }).join('') : '<p class="empty">Aucune voie.</p>';
+    box.scrollTop = top;
+    T.$$('#impKinds .chip').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-k') === kind); });
+    T.$$('#impSides .chip').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-sd') === defaultSide); });
+    renderSummary();
+  }
+
   function setData(text, label) {
     var res = build(text);
     if (!res.ok) { T.toast(res.msg); return false; }
-    voies = res.voies; sel = {}; srcLabel = label;
+    voies = res.voies; sel = {}; sides = {}; ranges = {}; defaultSide = 'all';
     var total = voies.reduce(function (n, v) { return n + v.items.length; }, 0);
     T.$('#impSrc').textContent = label + ' : ' + voies.length + ' voies, ' + total + ' adresses';
     render();
@@ -134,14 +193,14 @@
     var items = [];
     voies.forEach(function (v, i) {
       if (!sel[i]) return;
-      v.items.forEach(function (a) { items.push({ street: v.name, number: a.num, lat: a.lat, lng: a.lng }); });
+      itemsOf(i).forEach(function (a) { items.push({ street: v.name, number: a.num, lat: a.lat, lng: a.lng }); });
     });
     if (!items.length) return;
     if (T.store.all().length + items.length > 5000 &&
         !confirm('Cela porte le total à plus de 5 000 habitations : le partage de la version test risque de devenir trop lourd (limite GitHub environ 1 Mo). Continuer ?')) return;
     var r = T.store.addAddresses(items);
     T.$('#imp').classList.add('hidden');
-    sel = {};
+    sel = {}; ranges = {};
     T.toast(r.created + ' ajoutée(s)' + (r.placed ? ', ' + r.placed + ' placée(s) sur la carte' : '') + (r.skipped ? ', ' + r.skipped + ' déjà présente(s)' : ''));
   }
 
@@ -149,18 +208,49 @@
     T.$('#btnOpenImp').addEventListener('click', open);
     T.$('#impClose').addEventListener('click', function () { T.$('#imp').classList.add('hidden'); });
     T.$('#impSearch').addEventListener('input', function () { query = this.value; render(); });
+    T.$('#impQuartiers').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-q]');
+      if (!b) return;
+      var idx = quartierIdx(T.QUARTIERS[parseInt(b.getAttribute('data-q'), 10)]);
+      var all = idx.every(function (i) { return sel[i]; });
+      idx.forEach(function (i) { if (all) delete sel[i]; else sel[i] = 1; });
+      render();
+    });
     T.$('#impKinds').addEventListener('click', function (e) {
       var b = e.target.closest('[data-k]');
       if (b) { kind = b.getAttribute('data-k'); render(); }
     });
+    // Côté de la rue : choix général (remet toutes les voies sur ce côté)
+    T.$('#impSides').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-sd]');
+      if (!b) return;
+      defaultSide = b.getAttribute('data-sd'); sides = {};
+      render();
+    });
+    T.$('#impList').addEventListener('click', function (e) {
+      // Côté propre à une voie : touche pour passer Tous → Impairs → Pairs
+      var b = e.target.closest('[data-side]');
+      if (!b) return;
+      e.preventDefault();
+      var i = b.getAttribute('data-side');
+      sides[i] = SIDE_ORDER[(SIDE_ORDER.indexOf(sideOf(i)) + 1) % SIDE_ORDER.length];
+      render();
+    });
     T.$('#impList').addEventListener('change', function (e) {
       var i = e.target.getAttribute('data-i');
+      var rk = e.target.hasAttribute('data-rmin') ? 'min' : e.target.hasAttribute('data-rmax') ? 'max' : '';
+      if (rk) {
+        var ri = e.target.getAttribute('data-r' + rk);
+        var v = parseInt(e.target.value, 10);
+        ranges[ri] = ranges[ri] || {};
+        if (v > 0) ranges[ri][rk] = v; else delete ranges[ri][rk];
+        render();
+        return;
+      }
       if (i === null) return;
       if (e.target.checked) sel[i] = 1; else delete sel[i];
-      var s = summary();
-      T.$('#impSum').textContent = s.nv + ' voie(s) cochée(s) — ' + s.na + ' adresse(s)';
-      T.$('#impGo').disabled = !s.na;
-      T.$('#impGo').textContent = s.na ? 'Importer ' + s.na + ' adresse(s)' : 'Cochez des rues à importer';
+      renderQuartiers();
+      renderSummary();
     });
     T.$('#impAll').addEventListener('click', function () { visible().forEach(function (o) { sel[o.i] = 1; }); render(); });
     T.$('#impNone').addEventListener('click', function () { visible().forEach(function (o) { delete sel[o.i]; }); render(); });
@@ -175,5 +265,5 @@
     });
   }
 
-  T.imp = { init: init, parse: build };
+  T.imp = { init: init, parse: build, bySide: bySide, byRange: byRange };
 })();

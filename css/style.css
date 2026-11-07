@@ -107,3 +107,31 @@ td,th{padding:5px 4px;text-align:left;border-bottom:1px solid var(--line)}
 .imp-row em{font-style:normal;font-size:11px;background:var(--bg);border-radius:8px;padding:1px 6px;color:var(--mut)}
 .imp-actions{display:flex;gap:8px}
 .btn-main:disabled{opacity:.45}
+
+/* quartiers */
+.q-select{margin:0 0 8px;padding:9px 10px}
+
+/* logements multiples (immeubles) */
+.pinw{position:relative;width:28px;height:28px}
+.cnt{position:absolute;top:-7px;right:-9px;min-width:17px;padding:0 4px;border-radius:9px;background:#1d2024;color:#fff;border:1px solid #fff;font:700 10px/15px system-ui;text-align:center}
+.unit-chips{margin-bottom:8px}
+.unit-chips:empty{display:none}
+.chip .dot{margin-right:5px;border-color:var(--line)}
+
+/* côté de la rue (import) */
+.imp-row .side{margin-left:auto;border:1px solid var(--line);background:#fff;border-radius:12px;padding:3px 9px;font-size:12px;color:var(--mut)}
+.imp-row .side.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+.imp-row .side + small{margin-left:0;min-width:28px;text-align:right}
+.imp-list{min-height:160px}
+
+/* dons */
+.don-box{border:1px solid var(--line);border-radius:12px;padding:10px;margin:4px 0 10px;background:#fafafa}
+label.chk{display:flex;align-items:center;gap:8px;color:var(--ink);font-size:14px}
+label.chk input{width:22px;height:22px;margin:0;flex:none}
+table.caisse input{width:80px;margin:0;padding:6px 8px}
+table.caisse td.cm{text-align:right;color:var(--mut)}
+td.ok{color:var(--c-passe);font-weight:700} td.ko{color:var(--c-refus);font-weight:700}
+
+/* tranche de numéros (import) */
+.imp-range{display:flex;align-items:center;gap:6px;padding:4px 10px 8px 42px;border-bottom:1px solid var(--line);font-size:13px;color:var(--mut)}
+.imp-range input{width:80px;margin:0;padding:5px 8px;font-size:14px}

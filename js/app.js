@@ -22,6 +22,7 @@
     T.$$('.tabs button').forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-tab') === name); });
     if (name === 'map') T.map.refresh();
     if (name !== 'map') T.map.stopAdd();
+    if (name === 'dons') T.finance.show();
   }
 
   /* ---------- connexion ---------- */
@@ -72,23 +73,76 @@
     });
   }
 
+  // Autres logements de la même adresse, pour passer de l'un à l'autre
+  function renderUnitChips(h) {
+    var box = T.$('#unitChips');
+    var list = h ? T.store.atAddress(h.street, h.number) : [];
+    if (list.length < 2) { box.innerHTML = ''; return; }
+    box.innerHTML = list.map(function (x) {
+      return '<button type="button" class="chip' + (x.id === h.id ? ' on' : '') + '" data-u="' + x.id + '">' +
+        '<i class="dot s-' + x.status + '"></i>' + T.esc(x.unit || 'Sans nom') + '</button>';
+    }).join('');
+  }
+
+  // Montant masqué si « gratuit » ou sans paiement ; e-mail visible seulement si reçu demandé
+  function syncDonUi() {
+    var pay = T.$('#fPay').value;
+    T.$('#fAmount').parentNode.classList.toggle('hidden', pay !== 'esp' && pay !== 'chq' && pay !== '');
+    T.$('#rowEmail').classList.toggle('hidden', !T.$('#fReceipt').checked);
+  }
+
+  // Lit le bloc « don » ; renvoie null si une valeur est invalide (message déjà affiché)
+  function readDon() {
+    var pay = T.$('#fPay').value, amount = null;
+    if (pay === 'esp' || pay === 'chq') {
+      amount = T.money.parse(T.$('#fAmount').value);
+      if (isNaN(amount) || amount <= 0) { T.toast('Montant invalide (ex : 10 ou 12,50)'); return null; }
+    } else if (pay === 'gratuit') amount = 0;
+    else if (T.$('#fAmount').value.trim()) { T.toast('Choisissez le mode de paiement'); return null; }
+    return { pay: pay, amount: amount, donor: T.$('#fDonor').value.trim(),
+      receipt: T.$('#fReceipt').checked, email: T.$('#fReceipt').checked ? T.$('#fEmail').value.trim() : '' };
+  }
+
+  function renderVisits(h) {
+    var v = h && h.visits || [];
+    var box = T.$('#visitInfo');
+    if (!v.length) { box.textContent = ''; return; }
+    var by = {};
+    v.forEach(function (x) { by[x.by || '?'] = (by[x.by || '?'] || 0) + 1; });
+    var last = v[v.length - 1];
+    box.textContent = 'Passages : ' + v.length + ' (' + Object.keys(by).map(function (k) { return k + ' ' + by[k]; }).join(', ') +
+      ') — dernier le ' + new Date(last.d).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) + ' par ' + (last.by || '?');
+  }
+
   function openSheet(id, opts) {
     var h = id ? T.store.get(id) : null;
     if (id && !h) return;
-    cur = { id: id || null, lat: opts && opts.lat, lng: opts && opts.lng };
+    opts = opts || {};
+    cur = { id: id || null, lat: opts.lat, lng: opts.lng };
     var my = ++token;
-    T.$('#sheetTitle').textContent = h ? 'Modifier l\'habitation' : 'Nouvelle habitation';
-    T.$('#fStreet').value = h ? h.street : '';
-    T.$('#fNumber').value = h ? h.number : '';
+    T.$('#sheetTitle').textContent = h ? 'Modifier l\'habitation' : (opts.street ? 'Autre logement' : 'Nouvelle habitation');
+    T.$('#fStreet').value = h ? h.street : (opts.street || '');
+    T.$('#fNumber').value = h ? h.number : (opts.number || '');
+    T.$('#fUnit').value = h ? (h.unit || '') : '';
     T.$('#fNote').value = h ? h.note : '';
+    T.$('#fCount').value = 1;
+    T.$('#fPay').value = h && h.pay || '';
+    T.$('#fAmount').value = h && h.pay && h.pay !== 'gratuit' && h.amount != null ? String(h.amount).replace('.', ',') : '';
+    T.$('#fDonor').value = h && h.donor || '';
+    T.$('#fReceipt').checked = !!(h && h.receipt);
+    T.$('#fEmail').value = h && h.email || '';
+    syncDonUi();
+    T.$('#rowCount').classList.toggle('hidden', !!h || !!opts.street);
     T.$('#streetList').innerHTML = T.store.streets().map(function (s) { return '<option value="' + T.esc(s) + '">'; }).join('');
     T.$$('#statusBtns button').forEach(function (b) {
       b.classList.toggle('cur', !!h && b.getAttribute('data-s') === h.status);
     });
+    renderUnitChips(h);
+    renderVisits(h);
     T.$('#sheetExtra').classList.toggle('hidden', !h);
     T.$('#sheet').classList.remove('hidden');
 
-    if (!h) {
+    if (!h && !opts.street && cur.lat != null) {
       // Nouvelle habitation : on propose la rue et le numéro d'après la carte
       T.map.reverse(cur.lat, cur.lng).then(function (r) {
         if (token !== my || cur.id) return;
@@ -107,12 +161,30 @@
     if (!cur) return;
     var street = T.$('#fStreet').value.trim();
     var number = T.$('#fNumber').value.trim();
+    var unit = T.$('#fUnit').value.trim();
     var note = T.$('#fNote').value.trim();
     if (!street && !number) { T.toast('Indiquez au moins une rue ou un numéro'); return; }
+    var don = readDon();
+    if (!don) return;
+    if (don.pay && status !== 'passe') { T.toast('Un don se saisit avec le statut « Passé »'); return; }
     if (cur.id) {
-      T.store.update(cur.id, { street: street, number: number, note: note, status: status });
+      T.store.update(cur.id, { street: street, number: number, unit: unit, note: note, status: status,
+        pay: don.pay, amount: don.amount, donor: don.donor, receipt: don.receipt, email: don.email }, { visit: true });
     } else {
-      T.store.add({ street: street, number: number, note: note, status: status, lat: cur.lat, lng: cur.lng });
+      var count = Math.max(1, Math.min(60, parseInt(T.$('#fCount').value, 10) || 1));
+      if (count === 1) {
+        var dup = T.store.atAddress(street, number).some(function (h) {
+          return (h.unit || '').toLowerCase() === unit.toLowerCase();
+        });
+        if (dup) { T.toast('Cette habitation existe déjà : précisez le logement (ex. Apt 2)'); return; }
+        T.store.add({ street: street, number: number, unit: unit, note: note, status: status, lat: cur.lat, lng: cur.lng,
+          pay: don.pay, amount: don.amount, donor: don.donor, receipt: don.receipt, email: don.email });
+      } else {
+        // Immeuble : plusieurs logements créés d'un coup à la même adresse
+        for (var i = 1; i <= count; i++) {
+          T.store.add({ street: street, number: number, unit: (unit ? unit + ' ' : 'Logt ') + i, note: note, status: status, lat: cur.lat, lng: cur.lng });
+        }
+      }
     }
     lastStreet = street;
     closeSheet();
@@ -125,6 +197,7 @@
       '<div class="grid" id="kpiBox"></div>' +
       '<div class="card"><h3>Avancement</h3><div class="bar" id="barBox"></div><small id="barTxt" class="hint"></small></div>' +
       '<div class="card"><h3>Par équipe</h3><div id="teamBox"></div></div>' +
+      '<div class="card"><h3>Passages (nombre de visites)</h3><div id="visitBox"></div></div>' +
       '<div class="card"><h3>Compte</h3>' +
         '<p id="accountTxt" style="margin:0 0 8px"></p>' +
         '<div class="btn-col"><button id="btnSyNow" class="btn-sec" type="button">Synchroniser maintenant</button>' +
@@ -186,6 +259,12 @@
     }).join('') : '';
     var done = s.total ? Math.round(100 * (s.total - s.todo) / s.total) : 0;
     T.$('#barTxt').textContent = done + ' % des habitations visitées';
+    var vs = T.store.visitStats();
+    T.$('#visitBox').innerHTML = vs.total
+      ? '<p style="margin:0 0 6px"><b>' + vs.total + '</b> passage(s) sur <b>' + vs.housesVisited + '</b> habitation(s) — <b>' + vs.multi + '</b> visitée(s) plus d\'une fois</p>' +
+        '<table><tr><th>Équipe</th><th>Passages</th></tr>' + Object.keys(vs.byTeam).sort().map(function (k) {
+          return '<tr><td>' + T.esc(k) + '</td><td>' + vs.byTeam[k] + '</td></tr>'; }).join('') + '</table>'
+      : '<p class="hint">Aucun passage enregistré.</p>';
     var bt = T.store.byTeam(), keys = Object.keys(bt);
     T.$('#teamBox').innerHTML = keys.length
       ? '<table><tr><th>Équipe</th><th>Passé</th><th>À repasser</th><th>Refus</th></tr>' +
@@ -206,9 +285,23 @@
     buildStatusBtns();
     buildBilan();
     bindLogin();
+    T.$('#fPay').addEventListener('change', syncDonUi);
+    T.$('#fReceipt').addEventListener('change', syncDonUi);
     T.$('#btnClose').addEventListener('click', closeSheet);
     T.$('#sheet').addEventListener('click', function (e) { if (e.target === this) closeSheet(); });
 
+    T.$('#unitChips').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-u]');
+      if (b) openSheet(b.getAttribute('data-u'));
+    });
+    T.$('#btnAddUnit').addEventListener('click', function () {
+      var h = cur && T.store.get(cur.id);
+      if (!h) return;
+      var street = h.street, number = h.number, lat = h.lat, lng = h.lng;
+      closeSheet();
+      openSheet(null, { street: street, number: number, lat: lat, lng: lng });
+      T.$('#fUnit').focus();
+    });
     T.$('#btnGoMap').addEventListener('click', function () {
       var h = cur && T.store.get(cur.id);
       if (!h) return;
@@ -230,6 +323,7 @@
     T.map.init();
     T.list.init();
     T.imp.init();
+    T.finance.init();
     T.sync.init();
     refresh();
     if (T.sync.isOn()) hideLogin(); else showLogin();

@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   var T = window.Tour;
-  var filter = 'all';
+  var filter = 'all', quartier = 'all';
 
   function renderFilters() {
     var s = T.store.stats();
@@ -19,7 +19,11 @@
 
   function render() {
     renderFilters();
-    var list = T.store.sorted(filter);
+    var list = T.store.sorted(filter).filter(function (h) {
+      if (quartier === 'all') return true;
+      var q = T.quartierOf(h.street);
+      return quartier === '_none' ? !q : q === quartier;
+    });
     var body = T.$('#listBody');
     if (!list.length) {
       body.innerHTML = '<p class="empty">' + (T.store.all().length
@@ -39,14 +43,18 @@
       }
       html += '<div class="row-h" data-id="' + h.id + '">' +
         '<div class="pin s-' + h.status + '">' + T.esc(String(h.number || '').slice(0, 4)) + '</div>' +
-        '<div class="main"><b>' + T.esc(street) + ' ' + T.esc(h.number) + '</b>' +
-        '<small>' + T.esc(h.note || '') + (h.lat == null ? ' · non placée sur la carte' : '') + '</small></div>' +
+        '<div class="main"><b>' + T.esc(street) + ' ' + T.esc(h.number) + (h.unit ? ' · ' + T.esc(h.unit) : '') + '</b>' +
+        '<small>' + ((h.visits || []).length > 1 ? (h.visits.length + ' passages · ') : '') + T.esc(h.note || '') + (h.lat == null ? ' · non placée sur la carte' : '') + '</small></div>' +
         '<span class="st">' + T.STATUS[h.status].label + '</span></div>';
     });
     body.innerHTML = html;
   }
 
   function init() {
+    T.$('#qFilter').innerHTML = '<option value="all">Tous les quartiers</option>' +
+      T.QUARTIERS.map(function (q) { return '<option value="' + T.esc(q.name) + '">' + T.esc(q.name) + '</option>'; }).join('') +
+      '<option value="_none">Autres rues</option>';
+    T.$('#qFilter').addEventListener('change', function () { quartier = this.value; render(); });
     T.$('#filters').addEventListener('click', function (e) {
       var b = e.target.closest('[data-f]');
       if (!b) return;

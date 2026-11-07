@@ -7,25 +7,56 @@
   var T = window.Tour;
   var map, layer, addMode = false, placingId = null, fitted = false, mePin = null;
 
-  function icon(h) {
+  // Statut affiché pour une adresse : celui des logements s'ils sont tous pareils ;
+  // sinon « à repasser » s'il reste à faire, puis « passé », sinon « refus ».
+  function aggregate(list) {
+    var set = {};
+    list.forEach(function (h) { set[h.status] = 1; });
+    var keys = Object.keys(set);
+    if (keys.length === 1) return keys[0];
+    if (set.repasser || set.todo) return 'repasser';
+    if (set.passe) return 'passe';
+    return 'refus';
+  }
+
+  function icon(group) {
+    var h = group[0];
+    var st = group.length > 1 ? aggregate(group) : h.status;
     var txt = T.esc(String(h.number || '').slice(0, 4));
+    var cnt = group.length > 1 ? '<b class="cnt">' + group.length + '</b>' : '';
     return L.divIcon({
       className: '',
-      html: '<div class="pin s-' + h.status + '">' + txt + '</div>',
+      html: '<div class="pinw"><div class="pin s-' + st + '">' + txt + '</div>' + cnt + '</div>',
       iconSize: [28, 28], iconAnchor: [14, 14]
     });
+  }
+
+  // Logement à ouvrir en touchant la pastille : le premier qui reste à faire
+  function pick(group) {
+    var order = ['todo', 'repasser'];
+    for (var i = 0; i < order.length; i++) {
+      var f = group.filter(function (h) { return h.status === order[i]; })[0];
+      if (f) return f;
+    }
+    return group[0];
   }
 
   function render() {
     if (!map) return;
     layer.clearLayers();
-    var pts = [];
-    T.store.all().forEach(function (h) {
+    var groups = {}, order = [], pts = [];
+    T.store.sorted().forEach(function (h) {
       if (h.lat == null || h.lng == null) return;
-      var m = L.marker([h.lat, h.lng], { icon: icon(h) });
-      m.on('click', function () { T.app.openSheet(h.id); });
+      var k = h.street.toLowerCase() + '|' + String(h.number).toLowerCase();
+      if (!groups[k]) { groups[k] = []; order.push(k); }
+      groups[k].push(h);
+    });
+    order.forEach(function (k) {
+      var g = groups[k];
+      var m = L.marker([g[0].lat, g[0].lng], { icon: icon(g) });
+      m.on('click', function () { T.app.openSheet(pick(g).id); });
       m.addTo(layer);
-      pts.push([h.lat, h.lng]);
+      pts.push([g[0].lat, g[0].lng]);
     });
     if (!fitted && pts.length) {
       map.fitBounds(pts, { padding: [40, 40], maxZoom: 18 });
@@ -61,7 +92,11 @@
 
     map.on('click', function (e) {
       if (placingId) {
-        T.store.update(placingId, { lat: e.latlng.lat, lng: e.latlng.lng });
+        var cur = T.store.get(placingId);
+        // Tous les logements de l'adresse suivent la même position
+        (cur ? T.store.atAddress(cur.street, cur.number) : []).forEach(function (h) {
+          T.store.update(h.id, { lat: e.latlng.lat, lng: e.latlng.lng });
+        });
         var id = placingId;
         stopPlacing();
         T.toast('Habitation placée');

@@ -6,7 +6,7 @@
   'use strict';
   var T = window.Tour = window.Tour || {};
 
-  T.VERSION = '0.1-test-local';
+  T.VERSION = '0.6-test';
 
   T.STATUS = {
     todo:     { label: 'Pas visité', color: '#8a8f98' },
@@ -45,6 +45,25 @@
     on: function (name, fn) { (handlers[name] = handlers[name] || []).push(fn); },
     emit: function (name, data) { (handlers[name] || []).forEach(function (fn) { fn(data); }); }
   };
+
+  // Montants en euros
+  T.money = {
+    // « 12,5 » ou « 12.50 » → 12.5 ; NaN si ce n'est pas un montant
+    parse: function (s) {
+      s = String(s == null ? '' : s).trim().replace(/\s/g, '').replace(',', '.');
+      if (!/^\d+(\.\d{1,2})?$/.test(s)) return NaN;
+      return Math.round(parseFloat(s) * 100) / 100;
+    },
+    fmt: function (n) {
+      return (Number(n) || 0).toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' });
+    },
+    label: function (h) {
+      if (!h || !h.pay) return '';
+      if (h.pay === 'gratuit') return 'Gratuit';
+      return T.money.fmt(h.amount) + (h.pay === 'esp' ? ' espèces' : ' chèque');
+    }
+  };
+  T.PAY = { esp: 'Espèces', chq: 'Chèque', gratuit: 'Gratuit' };
 
   T.download = function (filename, text, mime) {
     var blob = new Blob([text], { type: mime || 'text/plain' });

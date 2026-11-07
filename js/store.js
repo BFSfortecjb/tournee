@@ -7,7 +7,7 @@
   'use strict';
   var T = window.Tour;
   var KEY = 'bfs_tournee_v1';
-  var state = { houses: [], settings: { team: '' }, deleted: [] };
+  var state = { houses: [], settings: { team: '' }, deleted: [], caisse: {} };
 
   function load() {
     try {
@@ -18,6 +18,7 @@
           state.houses = d.houses;
           state.settings = d.settings || { team: '' };
           state.deleted = Array.isArray(d.deleted) ? d.deleted : [];
+          state.caisse = d.caisse && typeof d.caisse === 'object' ? d.caisse : {};
         }
       }
     } catch (e) { console.error('Lecture impossible', e); }
@@ -41,6 +42,33 @@
            String(h.number).toLowerCase() === String(number).toLowerCase();
   }
   function isDeleted(id) { return state.deleted.indexOf(id) >= 0; }
+  function today() {
+    var d = new Date();
+    return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
+  }
+  function cents(h) { return h.pay === 'gratuit' ? 0 : Math.round((Number(h.amount) || 0) * 100); }
+  function csvLine(r) {
+    return r.map(function (c) { return '"' + String(c == null ? '' : c).replace(/"/g, '""') + '"'; }).join(';');
+  }
+  // Journal des passages d'un logement : [{d: date ISO, by: équipe, s: statut}]
+  function visitKey(v) { return v.d + '|' + v.by; }
+  function unionVisits(a, b) {
+    var seen = {}, out = [];
+    (a || []).concat(b || []).forEach(function (v) {
+      if (!v || !v.d || seen[visitKey(v)]) return;
+      seen[visitKey(v)] = 1; out.push(v);
+    });
+    return out.sort(function (x, y) { return x.d < y.d ? -1 : 1; });
+  }
+  // Ajoute un passage (sauf double touche : même équipe, même statut, moins de 2 minutes)
+  function addVisit(h, status) {
+    if (status === 'todo') return;
+    var team = state.settings.team || '', now = Date.now();
+    var last = (h.visits || []).filter(function (v) { return v.by === team; }).pop();
+    if (last && last.s === status && now - Date.parse(last.d) < 120000) return;
+    h.visits = (h.visits || []).concat([{ d: new Date(now).toISOString(), by: team, s: status }]);
+  }
+  function quartier(street) { return (T.quartierOf && T.quartierOf(street)) || 'Autres rues'; }
 
   T.store = {
     all: function () { return state.houses; },
@@ -53,26 +81,45 @@
     },
 
     add: function (h) {
+      var pay = h.pay || '';
       var o = {
         id: T.uid(),
         street: String(h.street || '').trim(),
         number: String(h.number || '').trim(),
+        unit: String(h.unit || '').trim(),
         lat: h.lat == null ? null : h.lat,
         lng: h.lng == null ? null : h.lng,
         status: h.status || 'todo',
         note: String(h.note || '').trim(),
+        amount: pay ? (h.amount == null ? null : h.amount) : null,
+        pay: pay,
+        donor: String(h.donor || '').trim(),
+        receipt: !!h.receipt,
+        email: String(h.email || '').trim(),
+        paid_on: pay ? today() : '',
+        paid_by: pay ? (state.settings.team || '') : '',
         team: h.team || state.settings.team || '',
+        visits: [],
         updated: new Date().toISOString()
       };
+      addVisit(o, o.status);
       state.houses.push(o);
       save();
       return o;
     },
-    update: function (id, patch) {
+    update: function (id, patch, opts) {
       var h = T.store.get(id);
       if (!h) return null;
+      // Un don modifié est daté et attribué à l'équipe qui le saisit
+      var donChanged = (patch.amount !== undefined && patch.amount !== h.amount) ||
+                       (patch.pay !== undefined && patch.pay !== h.pay);
       Object.keys(patch).forEach(function (k) { h[k] = patch[k]; });
-      if (patch.status !== undefined || patch.note !== undefined) {
+      if (opts && opts.visit) addVisit(h, h.status);
+      if (donChanged) {
+        if (h.pay) { h.paid_on = today(); h.paid_by = state.settings.team || h.paid_by || ''; }
+        else { h.paid_on = ''; h.paid_by = ''; h.amount = null; }
+      }
+      if (patch.status !== undefined || patch.note !== undefined || donChanged) {
         h.team = state.settings.team || h.team || '';
       }
       h.updated = new Date().toISOString();
@@ -97,7 +144,7 @@
         var dup = state.houses.some(function (h) { return same(h, street, n); });
         if (dup) continue;
         state.houses.push({
-          id: T.uid(), street: street, number: String(n), lat: null, lng: null,
+          id: T.uid(), street: street, number: String(n), unit: '', lat: null, lng: null,
           status: 'todo', note: '', team: state.settings.team || '',
           updated: new Date().toISOString()
         });
@@ -109,25 +156,39 @@
     // Ajoute des adresses importées (rue, numéro, lat, lng). Une habitation déjà créée
     // sans position reçoit ses coordonnées ; les autres doublons sont ignorés.
     addAddresses: function (items) {
+      // Plusieurs logements peuvent partager une adresse : on regarde rue + numéro, tous logements confondus
       var idx = {};
-      state.houses.forEach(function (h) { idx[h.street.toLowerCase() + '|' + String(h.number).toLowerCase()] = h; });
+      state.houses.forEach(function (h) {
+        var k = h.street.toLowerCase() + '|' + String(h.number).toLowerCase();
+        (idx[k] = idx[k] || []).push(h);
+      });
       var created = 0, placed = 0, skipped = 0, now = new Date().toISOString();
       items.forEach(function (a) {
         var key = a.street.toLowerCase() + '|' + String(a.number).toLowerCase();
         var ex = idx[key];
         if (ex) {
-          if (ex.lat == null && a.lat != null) { ex.lat = a.lat; ex.lng = a.lng; ex.updated = now; placed++; }
-          else skipped++;
+          var did = false;
+          ex.forEach(function (h) {
+            if (h.lat == null && a.lat != null) { h.lat = a.lat; h.lng = a.lng; h.updated = now; did = true; }
+          });
+          if (did) placed++; else skipped++;
           return;
         }
-        var h = { id: T.uid(), street: a.street, number: String(a.number), lat: a.lat, lng: a.lng,
+        var h = { id: T.uid(), street: a.street, number: String(a.number), unit: '', lat: a.lat, lng: a.lng,
           status: 'todo', note: '', team: '', updated: now };
         state.houses.push(h);
-        idx[key] = h;
+        idx[key] = [h];
         created++;
       });
       if (created || placed) save();
       return { created: created, placed: placed, skipped: skipped };
+    },
+    // Tous les logements d'une même adresse (rue + numéro)
+    atAddress: function (street, number) {
+      var s = String(street || '').toLowerCase(), n = String(number || '').toLowerCase();
+      return T.store.sorted().filter(function (h) {
+        return h.street.toLowerCase() === s && String(h.number).toLowerCase() === n;
+      });
     },
     streets: function () {
       var seen = {};
@@ -139,13 +200,27 @@
         .filter(function (h) { return !filter || filter === 'all' || h.status === filter; })
         .sort(function (a, b) {
           var s = (a.street || '~').localeCompare(b.street || '~', 'fr');
-          return s || numKey(a.number) - numKey(b.number);
+          return s || numKey(a.number) - numKey(b.number) ||
+            String(a.number).localeCompare(String(b.number)) ||
+            String(a.unit || '').localeCompare(String(b.unit || ''), 'fr', { numeric: true });
         });
     },
     stats: function () {
       var s = { total: state.houses.length, todo: 0, passe: 0, repasser: 0, refus: 0 };
       state.houses.forEach(function (h) { if (s[h.status] !== undefined) s[h.status]++; });
       return s;
+    },
+    // Passages : total, par équipe, adresses visitées plusieurs fois
+    visitStats: function () {
+      var out = { total: 0, byTeam: {}, multi: 0, housesVisited: 0 };
+      state.houses.forEach(function (h) {
+        var v = h.visits || [];
+        if (!v.length) return;
+        out.housesVisited++;
+        if (v.length > 1) out.multi++;
+        v.forEach(function (x) { out.total++; out.byTeam[x.by || '(sans équipe)'] = (out.byTeam[x.by || '(sans équipe)'] || 0) + 1; });
+      });
+      return out;
     },
     byTeam: function () {
       var out = {};
@@ -158,30 +233,75 @@
       return out;
     },
 
+    /* ---------- argent ---------- */
+    // Totaux des dons (en euros), globalement et par équipe / quartier / jour
+    finance: function () {
+      function bucket(o, k) { return (o[k] = o[k] || { c: 0, esp: 0, chq: 0, gratuit: 0, n: 0 }); }
+      function add(b, h) {
+        var c = cents(h);
+        b.n++;
+        if (h.pay === 'gratuit') b.gratuit++;
+        else { b.c += c; if (h.pay === 'esp') b.esp += c; else b.chq += c; }
+      }
+      var out = { all: { c: 0, esp: 0, chq: 0, gratuit: 0, n: 0 }, team: {}, quartier: {}, day: {} };
+      state.houses.forEach(function (h) {
+        if (!h.pay) return;
+        add(out.all, h);
+        add(bucket(out.team, h.paid_by || h.team || '(sans équipe)'), h);
+        add(bucket(out.quartier, quartier(h.street)), h);
+        add(bucket(out.day, h.paid_on || '(sans date)'), h);
+      });
+      function eur(b) { return { total: b.c / 100, esp: b.esp / 100, chq: b.chq / 100, gratuit: b.gratuit, n: b.n }; }
+      var res = { all: eur(out.all), team: {}, quartier: {}, day: {} };
+      ['team', 'quartier', 'day'].forEach(function (g) {
+        Object.keys(out[g]).forEach(function (k) { res[g][k] = eur(out[g][k]); });
+      });
+      return res;
+    },
+    // Dons avec demande de reçu ou de facture
+    receipts: function () {
+      return T.store.sorted().filter(function (h) { return h.receipt; });
+    },
+    exportDonsCSV: function (onlyReceipts) {
+      var rows = [['Date', 'Équipe', 'Rue', 'Numéro', 'Logement', 'Quartier', 'Montant', 'Paiement', 'Donateur', 'Reçu demandé', 'E-mail']];
+      T.store.sorted().filter(function (h) { return onlyReceipts ? h.receipt : h.pay; }).forEach(function (h) {
+        rows.push([h.paid_on || '', h.paid_by || h.team || '', h.street, h.number, h.unit || '', quartier(h.street),
+          h.pay ? (h.pay === 'gratuit' ? 0 : Number(h.amount) || 0) : '', h.pay ? T.PAY[h.pay] : '',
+          h.donor || '', h.receipt ? 'oui' : '', h.email || '']);
+      });
+      return '﻿' + rows.map(csvLine).join('\r\n');
+    },
+    // Comptage de caisse d'une équipe : { esp: {valeur: quantité}, chq: {...}, chqOther: euros, updated }
+    getCaisse: function (team) { return state.caisse[team] || null; },
+    teamsWithCaisse: function () { return Object.keys(state.caisse); },
+    setCaisse: function (team, data) {
+      state.caisse[team] = { esp: data.esp || {}, chq: data.chq || {}, chqOther: Number(data.chqOther) || 0, updated: new Date().toISOString() };
+      save();
+    },
+
+    /* ---------- sauvegarde, partage ---------- */
     // Contenu partagé (sans les réglages propres à l'appareil)
     snapshot: function () {
       return JSON.stringify({ app: 'bfs-tournee', version: T.VERSION, saved: new Date().toISOString(),
-        houses: state.houses, deleted: state.deleted });
+        houses: state.houses, deleted: state.deleted, caisse: state.caisse });
     },
     exportJSON: function () {
       return JSON.stringify({ app: 'bfs-tournee', version: T.VERSION, exported: new Date().toISOString(),
-        houses: state.houses, deleted: state.deleted }, null, 2);
+        houses: state.houses, deleted: state.deleted, caisse: state.caisse }, null, 2);
     },
     exportCSV: function () {
-      var rows = [['Rue', 'Numéro', 'Statut', 'Note', 'Équipe', 'Latitude', 'Longitude', 'Mis à jour']];
+      var rows = [['Rue', 'Numéro', 'Logement', 'Statut', 'Note', 'Équipe', 'Latitude', 'Longitude', 'Passages', 'Mis à jour']];
       T.store.sorted().forEach(function (h) {
-        rows.push([h.street, h.number, T.STATUS[h.status].label, h.note, h.team,
-          h.lat == null ? '' : h.lat, h.lng == null ? '' : h.lng, h.updated]);
+        rows.push([h.street, h.number, h.unit || '', T.STATUS[h.status].label, h.note, h.team,
+          h.lat == null ? '' : h.lat, h.lng == null ? '' : h.lng, (h.visits || []).length, h.updated]);
       });
-      return '﻿' + rows.map(function (r) {
-        return r.map(function (c) { return '"' + String(c == null ? '' : c).replace(/"/g, '""') + '"'; }).join(';');
-      }).join('\r\n');
+      return '﻿' + rows.map(csvLine).join('\r\n');
     },
 
     // Fusion : même id => la modification la plus récente gagne ; les suppressions sont conservées
     merge: function (d, fromRemote) {
       if (!d || !Array.isArray(d.houses)) return { ok: false, msg: 'Contenu non reconnu' };
-      var added = 0, updated = 0, removed = 0;
+      var added = 0, updated = 0, removed = 0, cch = 0;
       (Array.isArray(d.deleted) ? d.deleted : []).forEach(function (id) {
         if (!isDeleted(id)) state.deleted.push(id);
       });
@@ -194,11 +314,22 @@
         var cur = T.store.get(n.id);
         if (!cur) { state.houses.push(n); added++; }
         else if ((n.updated || '') > (cur.updated || '')) {
+          var mine = cur.visits;
           Object.keys(n).forEach(function (k) { cur[k] = n[k]; });
+          cur.visits = unionVisits(mine, n.visits);
           updated++;
+        } else if (n.visits && n.visits.length) {
+          // même plus ancienne, une fiche peut contenir des passages que nous n'avons pas encore
+          var u = unionVisits(cur.visits, n.visits);
+          if (u.length !== (cur.visits || []).length) { cur.visits = u; updated++; }
         }
       });
-      if (added || updated || removed) save(!!fromRemote); else persist();
+      var dc = d.caisse && typeof d.caisse === 'object' ? d.caisse : {};
+      Object.keys(dc).forEach(function (t) {
+        var n = dc[t], c = state.caisse[t];
+        if (n && (!c || (n.updated || '') > (c.updated || ''))) { state.caisse[t] = n; cch++; }
+      });
+      if (added || updated || removed || cch) save(!!fromRemote); else persist();
       return { ok: true, added: added, updated: updated, removed: removed,
         msg: added + ' ajoutée(s), ' + updated + ' mise(s) à jour, ' + removed + ' supprimée(s)' };
     },
