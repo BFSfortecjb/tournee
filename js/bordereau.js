@@ -32,20 +32,20 @@
 
   // Calendriers : reçus, vendus (contre un don), donnés, gardés, rendus, écart
   function calTable(C) {
-    var t = { recu: 0, sold: 0, gift: 0, kept: 0, rendu: 0, ecart: 0, n: 0 };
+    var t = { recu: 0, sold: 0, gift: 0, cs: 0, kept: 0, rendu: 0, ecart: 0, n: 0 };
     var rows = C.rows.map(function (r) {
-      t.recu += r.recu || 0; t.sold += r.sold; t.gift += r.gift; t.kept += r.kept; t.rendu += r.rendu || 0;
+      t.recu += r.recu || 0; t.sold += r.sold; t.gift += r.gift; t.cs += r.cs; t.kept += r.kept; t.rendu += r.rendu || 0;
       if (r.ecart !== null) { t.ecart += r.ecart; t.n++; }
       var ec = r.ecart === null ? '<span class="nc">stock non saisi</span>' : (r.ecart === 0 ? '<span class="ok">OK</span>' : '<span class="ko">' + (r.ecart > 0 ? '+' : '') + r.ecart + '</span>');
-      return '<tr><td>' + T.esc(r.who) + '</td><td class="n">' + (r.recu === null ? '—' : r.recu) + '</td><td class="n">' + r.sold + '</td><td class="n">' + r.gift + '</td><td class="n">' + r.kept + '</td>' +
+      return '<tr><td>' + T.esc(r.who) + '</td><td class="n">' + (r.recu === null ? '—' : r.recu) + '</td><td class="n">' + r.sold + '</td><td class="n">' + r.gift + '</td><td class="n">' + r.cs + '</td><td class="n">' + r.kept + '</td>' +
         '<td class="n">' + (r.rendu === null ? '—' : r.rendu) + '</td><td class="n">' + ec + '</td></tr>';
-    }).join('') || '<tr><td colspan="7">Aucun calendrier enregistré.</td></tr>';
+    }).join('') || '<tr><td colspan="8">Aucun calendrier enregistré.</td></tr>';
     var motifs = Object.keys(C.motifs).map(function (m) {
       return '<tr><td>' + T.esc(T.MOTIFS[m] || m) + '</td><td class="n">' + C.motifs[m] + '</td></tr>';
     }).join('') || '<tr><td colspan="2">—</td></tr>';
-    return '<table><tr><th>Personne</th><th>Reçus</th><th>Vendus (contre un don)</th><th>Donnés</th><th>Gardés</th><th>Rendus</th><th>Écart</th></tr>' + rows +
-      '<tr class="tot"><td>TOTAL</td><td class="n">' + t.recu + '</td><td class="n">' + t.sold + '</td><td class="n">' + t.gift + '</td><td class="n">' + t.kept + '</td><td class="n">' + t.rendu + '</td><td class="n">' + (t.n ? (t.ecart === 0 ? '<span class="ok">OK</span>' : '<span class="ko">' + (t.ecart > 0 ? '+' : '') + t.ecart + '</span>') : '') + '</td></tr></table>' +
-      '<p class="note">Écart = reçus − vendus − donnés − gardés − rendus. 0 = tous les calendriers sont justifiés.</p>' +
+    return '<table><tr><th>Personne</th><th>Reçus</th><th>Vendus (contre un don)</th><th>Donnés</th><th>Autre CS</th><th>Gardés</th><th>Rendus</th><th>Écart</th></tr>' + rows +
+      '<tr class="tot"><td>TOTAL</td><td class="n">' + t.recu + '</td><td class="n">' + t.sold + '</td><td class="n">' + t.gift + '</td><td class="n">' + t.cs + '</td><td class="n">' + t.kept + '</td><td class="n">' + t.rendu + '</td><td class="n">' + (t.n ? (t.ecart === 0 ? '<span class="ok">OK</span>' : '<span class="ko">' + (t.ecart > 0 ? '+' : '') + t.ecart + '</span>') : '') + '</td></tr></table>' +
+      '<p class="note">Autre CS = donnés à d\'autres centres (échange entre casernes). Écart = reçus − vendus − donnés − autre CS − gardés − rendus. 0 = tous les calendriers sont justifiés.</p>' +
       '<table class="sm"><tr><th>Calendriers gratuits : motif</th><th>Nombre</th></tr>' + motifs + '</table>';
   }
 
@@ -53,6 +53,42 @@
     return wrap('Bordereau de restitution des calendriers',
       '<h2>Calendriers par personne</h2>' + calTable(T.store.calendriers()) +
       '<div class="sign"><div>Les distributeurs<br>Nom, date, signature</div><div>Responsable de la tournée<br>Nom, date, signature</div></div>');
+  }
+
+  // Total par carnet de souches (personne + n°), comparé au total collecté
+  function soucheTable(f) {
+    var keys = Object.keys(f.souche).sort(function (a, b) { return a.localeCompare(b, 'fr', { numeric: true }); }), tot = 0;
+    var rows = keys.map(function (k) {
+      var b = f.souche[k]; tot += b.total;
+      return '<tr><td>' + T.esc(k) + '</td><td class="n">' + b.nPaid + '</td><td class="n">' + fmt(b.total) + '</td></tr>';
+    }).join('') || '<tr><td colspan="3">—</td></tr>';
+    var d = Math.round((tot - f.all.total) * 100) / 100;
+    return '<table class="sm"><tr><th>Souche</th><th>Dons</th><th>Total</th></tr>' + rows +
+      '<tr class="tot"><td>Total souches</td><td class="n"></td><td class="n">' + fmt(tot) + '</td></tr>' +
+      '<tr><td>Total collecté</td><td class="n"></td><td class="n">' + fmt(f.all.total) + '</td></tr>' +
+      '<tr><td>Différence</td><td class="n"></td><td class="n">' + (Math.abs(d) < 0.005 ? '<span class="ok">0 — OK</span>' : '<span class="ko">' + fmt(d) + '</span>') + '</td></tr></table>';
+  }
+  function indTable() {
+    var I = T.store.indemnite();
+    return '<table class="sm"><tr><td>' + I.dist + ' calendriers × ' + fmt(I.rate) + ' + forfait ' + fmt(I.fixe) + '</td><td class="n"><b>' + fmt(I.cost) + '</b></td></tr>' +
+      '<tr><td>Par personne (' + I.nb + ')</td><td class="n"><b>' + fmt(I.each) + '</b></td></tr>' +
+      '<tr><td>Total collecté − coût</td><td class="n"><b>' + fmt(I.net) + '</b></td></tr></table>';
+  }
+  function histoTable() {
+    var I = T.store.indemnite();
+    function d(v) { return v == null ? '—' : '<span class="' + (v >= 0 ? 'ok' : 'ko') + '">' + (v > 0 ? '+' : '') + fmt(v) + '</span>'; }
+    return '<table class="sm"><tr><th>Année</th><th>Total</th><th>Écart</th><th>Net</th><th>Écart</th></tr>' +
+      '<tr class="tot"><td>' + T.TOURNEE.year + '</td><td class="n">' + fmt(I.total) + '</td><td></td><td class="n">' + fmt(I.net) + '</td><td></td></tr>' +
+      T.histoCompare().map(function (r) {
+        return '<tr><td>' + r.y + '</td><td class="n">' + fmt(r.total) + '</td><td class="n">' + d(r.dTotal) + '</td><td class="n">' + (r.net == null ? '—' : fmt(r.net)) + '</td><td class="n">' + d(r.dNet) + '</td></tr>';
+      }).join('') + '</table><p class="note">Écart = cette année moins l\'année indiquée.</p>';
+  }
+  function chqAmtTable(f) {
+    var keys = Object.keys(f.chqAmt).sort(function (a, b) { return parseFloat(b) - parseFloat(a); }), n = 0, tot = 0;
+    var rows = keys.map(function (k) { n += f.chqAmt[k]; tot += parseFloat(k) * f.chqAmt[k];
+      return '<tr><td>' + fmt(parseFloat(k)) + '</td><td class="n">' + f.chqAmt[k] + '</td><td class="n">' + fmt(parseFloat(k) * f.chqAmt[k]) + '</td></tr>'; }).join('') || '<tr><td colspan="3">—</td></tr>';
+    return '<table class="sm"><tr><th>Montant du chèque</th><th>Nombre</th><th>Total</th></tr>' + rows +
+      '<tr class="tot"><td>Total</td><td class="n">' + n + '</td><td class="n">' + fmt(tot) + '</td></tr></table>';
   }
 
   function html() {
@@ -87,15 +123,21 @@
     var allCounted = nCompte === B.rows.length && B.rows.length > 0;
     return wrap('Bordereau commun',
       '<h2>Synthèse</h2><table class="sm">' +
-      '<tr><td>Calendriers distribués</td><td class="n">' + f.all.cal + ' (' + f.all.sold + ' vendus + ' + f.all.gift + ' donnés)</td></tr>' +
+      '<tr><td>Calendriers distribués</td><td class="n">' + f.all.cal + ' (' + f.all.sold + ' vendus + ' + f.all.gift + ' donnés + ' + f.all.cs + ' autre CS)</td></tr>' +
       '<tr><td>Calendriers gardés</td><td class="n">' + f.all.kept + '</td></tr>' +
       '<tr><td>Total espèces saisi</td><td class="n">' + fmt(f.all.esp) + '</td></tr><tr><td>Total chèques saisi</td><td class="n">' + fmt(f.all.chq) + '</td></tr>' +
       '<tr class="tot"><td>TOTAL COLLECTÉ (saisi)</td><td class="n">' + fmt(f.all.total) + '</td></tr>' +
+      '<tr><td>Don moyen (' + f.all.nPaid + ' dons)</td><td class="n">' + fmt(f.all.avg) + '</td></tr>' +
+      '<tr><td>Nombre de chèques / billets / pièces</td><td class="n">' + f.all.nchq + ' / ' + B.nBillets + ' / ' + B.nPieces + '</td></tr>' +
       '<tr><td>Total compté en caisse</td><td class="n">' + fmt(totCompte) + '</td></tr>' +
       '<tr><td>Écart global</td><td class="n">' + (allCounted ? (Math.abs(gd) < 0.005 ? '<span class="ok">OK</span>' : '<span class="ko">' + (gd > 0 ? '+' : '') + fmt(gd) + '</span>') : '<span class="nc">comptages incomplets</span>') + '</td></tr></table>' +
       '<h2>Par personne et par jour</h2><table><tr><th>Jour</th><th>Personne</th><th>Calendriers</th><th>Espèces saisies</th><th>Chèques saisis</th><th>Total saisi</th><th>Espèces comptées</th><th>Chèques comptés</th><th>Écart</th></tr>' + lines + '</table>' +
       '<h2>Par quartier</h2><table><tr><th>Quartier</th><th>Calendriers</th><th>Espèces</th><th>Chèques</th><th>Total</th></tr>' + qRows + '</table>' +
+      '<h2>Par souche</h2>' + soucheTable(f) +
       '<h2>Calendriers : stock et restitution</h2>' + calTable(T.store.calendriers()) +
+      '<h2>Indemnisation des distributeurs</h2>' + indTable() +
+      '<h2>Comparaison avec les années passées</h2>' + histoTable() +
+      '<h2>Chèques saisis, par montant</h2>' + chqAmtTable(f) +
       '<h2>Détail de la caisse comptée (tous comptages)</h2><div class="cols">' +
       coupures('Espèces', dEsp) + coupures('Chèques', dChq, B.chqOther ? '<tr><td>Autres chèques</td><td class="n">—</td><td class="n">' + fmt(B.chqOther) + '</td></tr>' : '') + '</div>' +
       '<p>Total espèces comptées : <b>' + fmt(espTotal) + '</b> · Total chèques comptés : <b>' + fmt(chqTotal) + '</b></p>' +

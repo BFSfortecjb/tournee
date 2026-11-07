@@ -7,7 +7,7 @@
   'use strict';
   var T = window.Tour;
   var KEY = 'bfs_tournee_v1';
-  var state = { houses: [], settings: { team: '' }, deleted: [], caisse: {}, stock: {} };
+  var state = { houses: [], settings: { team: '' }, deleted: [], caisse: {}, stock: {}, params: null };
 
   function load() {
     try {
@@ -20,6 +20,7 @@
           state.deleted = Array.isArray(d.deleted) ? d.deleted : [];
           state.caisse = d.caisse && typeof d.caisse === 'object' ? d.caisse : {};
           state.stock = d.stock && typeof d.stock === 'object' ? d.stock : {};
+          state.params = d.params && typeof d.params === 'object' ? d.params : null;
         }
       }
     } catch (e) { console.error('Lecture impossible', e); }
@@ -147,6 +148,7 @@
         donor: String(h.donor || '').trim(),
         receipt: !!h.receipt,
         email: String(h.email || '').trim(),
+        souche: (pay === 'esp' || pay === 'chq') ? String(h.souche || '').trim() : '',
         paid_on: pay ? today() : '',
         paid_by: pay ? (state.settings.team || '') : '',
         team: h.team || state.settings.team || '',
@@ -166,6 +168,7 @@
                        (patch.pay !== undefined && patch.pay !== h.pay);
       Object.keys(patch).forEach(function (k) { h[k] = patch[k]; });
       if (h.pay !== 'gratuit') h.motif = '';
+      if (h.pay !== 'esp' && h.pay !== 'chq') h.souche = '';
       if (opts && opts.visit) addVisit(h, h.status);
       if (donChanged) {
         if (h.pay) { h.paid_on = today(); h.paid_by = state.settings.team || h.paid_by || ''; }
@@ -288,37 +291,72 @@
     /* ---------- argent ---------- */
     // Totaux des dons (en euros), globalement et par équipe / quartier / jour
     finance: function () {
-      function bucket(o, k) { return (o[k] = o[k] || { c: 0, esp: 0, chq: 0, gratuit: 0, n: 0, sold: 0, gift: 0, kept: 0 }); }
+      function blank() { return { c: 0, esp: 0, chq: 0, gratuit: 0, n: 0, sold: 0, gift: 0, cs: 0, kept: 0, nesp: 0, nchq: 0 }; }
+      function bucket(o, k) { return (o[k] = o[k] || blank()); }
       function add(b, h) {
         var c = cents(h);
         b.n++;
-        if (h.pay === 'gratuit') { b.gratuit++; if (h.motif === 'garde') b.kept += calOf(h); else b.gift += calOf(h); }
-        else { b.sold += calOf(h); b.c += c; if (h.pay === 'esp') b.esp += c; else b.chq += c; }
+        if (h.pay === 'gratuit') {
+          b.gratuit++;
+          if (h.motif === 'garde') b.kept += calOf(h);
+          else if (h.motif === 'echange') b.cs += calOf(h);
+          else b.gift += calOf(h);
+        } else {
+          b.sold += calOf(h); b.c += c;
+          if (h.pay === 'esp') { b.esp += c; b.nesp++; } else { b.chq += c; b.nchq++; }
+        }
       }
-      var out = { all: { c: 0, esp: 0, chq: 0, gratuit: 0, n: 0, sold: 0, gift: 0, kept: 0 }, team: {}, quartier: {}, day: {} };
+      var out = { all: blank(), team: {}, quartier: {}, day: {}, souche: {} }, chqAmt = {};
       state.houses.forEach(function (h) {
         if (!h.pay) return;
+        var who = h.paid_by || h.team || '(sans équipe)';
         add(out.all, h);
-        add(bucket(out.team, h.paid_by || h.team || '(sans équipe)'), h);
+        add(bucket(out.team, who), h);
         add(bucket(out.quartier, quartier(h.street)), h);
         add(bucket(out.day, h.paid_on || '(sans date)'), h);
+        if (h.pay === 'esp' || h.pay === 'chq') {
+          add(bucket(out.souche, who + ' — ' + (h.souche ? 'souche ' + h.souche : 'sans n° de souche')), h);
+        }
+        if (h.pay === 'chq') { var ak = String(Number(h.amount) || 0); chqAmt[ak] = (chqAmt[ak] || 0) + 1; }
       });
-      function eur(b) { return { total: b.c / 100, esp: b.esp / 100, chq: b.chq / 100, gratuit: b.gratuit, n: b.n, sold: b.sold, gift: b.gift, kept: b.kept, cal: b.sold + b.gift }; }
-      var res = { all: eur(out.all), team: {}, quartier: {}, day: {} };
-      ['team', 'quartier', 'day'].forEach(function (g) {
+      function eur(b) {
+        var np = b.nesp + b.nchq;
+        return { total: b.c / 100, esp: b.esp / 100, chq: b.chq / 100, gratuit: b.gratuit, n: b.n, sold: b.sold, gift: b.gift, cs: b.cs, kept: b.kept,
+          cal: b.sold + b.gift + b.cs, nesp: b.nesp, nchq: b.nchq, nPaid: np, avg: np ? Math.round(b.c / np) / 100 : 0 };
+      }
+      var res = { all: eur(out.all), team: {}, quartier: {}, day: {}, souche: {}, chqAmt: chqAmt };
+      ['team', 'quartier', 'day', 'souche'].forEach(function (g) {
         Object.keys(out[g]).forEach(function (k) { res[g][k] = eur(out[g][k]); });
       });
       return res;
+    },
+    // Paramètres de l'indemnisation des distributeurs (partagés) : coût = tarif × calendriers distribués + forfait
+    getParams: function () {
+      var p = state.params || {};
+      function num(v, d) { v = parseFloat(String(v).replace(',', '.')); return isNaN(v) || v < 0 ? d : v; }
+      return { rate: num(p.rate, 0.8), fixe: num(p.fixe, 20), nb: Math.max(1, parseInt(p.nb, 10) || 3), set: !!state.params };
+    },
+    setParams: function (rate, fixe, nb) {
+      state.params = { rate: rate, fixe: fixe, nb: nb, updated: new Date().toISOString() };
+      var ok = T.store.getParams();                       // valeurs corrigées si saisie invalide
+      state.params = { rate: ok.rate, fixe: ok.fixe, nb: ok.nb, updated: state.params.updated };
+      save();
+    },
+    indemnite: function () {
+      var p = T.store.getParams(), f = T.store.finance().all;
+      var cost = Math.round((p.rate * f.cal + p.fixe) * 100) / 100;
+      return { rate: p.rate, fixe: p.fixe, nb: p.nb, dist: f.cal, cost: cost, each: Math.round(cost / p.nb * 100) / 100,
+        total: f.total, net: Math.round((f.total - cost) * 100) / 100 };
     },
     // Dons avec demande de reçu ou de facture
     receipts: function () {
       return T.store.sorted().filter(function (h) { return h.receipt; });
     },
     exportDonsCSV: function (onlyReceipts) {
-      var rows = [['Date', 'Équipe', 'Rue', 'Numéro', 'Logement', 'Quartier', 'Montant', 'Paiement', 'Calendriers', 'Motif gratuit', 'Donateur', 'Reçu demandé', 'E-mail']];
+      var rows = [['Date', 'Équipe', 'Rue', 'Numéro', 'Logement', 'Quartier', 'Montant', 'Paiement', 'Calendriers', 'Motif gratuit', 'N° de souche', 'Donateur', 'Reçu demandé', 'E-mail']];
       T.store.sorted().filter(function (h) { return onlyReceipts ? h.receipt : h.pay; }).forEach(function (h) {
         rows.push([h.paid_on || '', h.paid_by || h.team || '', h.street, h.number, h.unit || '', quartier(h.street),
-          h.pay ? (h.pay === 'gratuit' ? 0 : Number(h.amount) || 0) : '', h.pay ? T.PAY[h.pay] : '', calOf(h) || '', h.motif ? T.MOTIFS[h.motif] || '' : '',
+          h.pay ? (h.pay === 'gratuit' ? 0 : Number(h.amount) || 0) : '', h.pay ? T.PAY[h.pay] : '', calOf(h) || '', h.motif ? T.MOTIFS[h.motif] || '' : '', h.souche || '',
           h.donor || '', h.receipt ? 'oui' : '', h.email || '']);
       });
       return '﻿' + rows.map(csvLine).join('\r\n');
@@ -336,8 +374,8 @@
       Object.keys(f.team).forEach(function (t) { seen[t] = 1; });
       Object.keys(state.stock).forEach(function (t) { seen[t] = 1; });
       Object.keys(seen).sort(function (a, b) { return a.localeCompare(b, 'fr'); }).forEach(function (t) {
-        var d = f.team[t] || { sold: 0, gift: 0, kept: 0, cal: 0 }, s = state.stock[t] || null;
-        rows.push({ who: t, recu: s ? s.recu : null, rendu: s ? s.rendu : null, sold: d.sold, gift: d.gift, kept: d.kept, dist: d.cal,
+        var d = f.team[t] || { sold: 0, gift: 0, cs: 0, kept: 0, cal: 0 }, s = state.stock[t] || null;
+        rows.push({ who: t, recu: s ? s.recu : null, rendu: s ? s.rendu : null, sold: d.sold, gift: d.gift, cs: d.cs, kept: d.kept, dist: d.cal,
           reste: s ? s.recu - d.cal - d.kept : null, ecart: s ? s.recu - d.cal - d.kept - s.rendu : null });
       });
       // Calendriers gratuits par motif (tous confondus)
@@ -400,7 +438,9 @@
         Object.keys(c.chq || {}).forEach(function (d) { chq[d] = (chq[d] || 0) + c.chq[d]; });
         other += Number(c.chqOther) || 0;
       });
-      return { rows: rows, esp: esp, chq: chq, chqOther: Math.round(other * 100) / 100, fin: T.store.finance() };
+      var nBillets = 0, nPieces = 0;
+      Object.keys(esp).forEach(function (d) { if (parseFloat(d.replace('_', '.')) >= 5) nBillets += esp[d]; else nPieces += esp[d]; });
+      return { rows: rows, nBillets: nBillets, nPieces: nPieces, esp: esp, chq: chq, chqOther: Math.round(other * 100) / 100, fin: T.store.finance() };
     },
     setCaisse: function (team, day, data) {
       state.caisse[team + '|' + day] = { esp: data.esp || {}, chq: data.chq || {}, chqOther: Number(data.chqOther) || 0, updated: new Date().toISOString() };
@@ -411,11 +451,11 @@
     // Contenu partagé (sans les réglages propres à l'appareil)
     snapshot: function () {
       return JSON.stringify({ app: 'bfs-tournee', version: T.VERSION, saved: new Date().toISOString(),
-        houses: state.houses, deleted: state.deleted, caisse: state.caisse, stock: state.stock });
+        houses: state.houses, deleted: state.deleted, caisse: state.caisse, stock: state.stock, params: state.params });
     },
     exportJSON: function () {
       return JSON.stringify({ app: 'bfs-tournee', version: T.VERSION, exported: new Date().toISOString(),
-        houses: state.houses, deleted: state.deleted, caisse: state.caisse, stock: state.stock }, null, 2);
+        houses: state.houses, deleted: state.deleted, caisse: state.caisse, stock: state.stock, params: state.params }, null, 2);
     },
     exportCSV: function () {
       var rows = [['Rue', 'Numéro', 'Logement', 'Statut', 'Note', 'Équipe', 'Latitude', 'Longitude', 'Passages', 'Mis à jour']];
@@ -457,6 +497,7 @@
         var n = dc[t], c = state.caisse[t];
         if (n && (!c || (n.updated || '') > (c.updated || ''))) { state.caisse[t] = n; cch++; }
       });
+      if (d.params && typeof d.params === 'object' && (!state.params || (d.params.updated || '') > (state.params.updated || ''))) { state.params = d.params; cch++; }
       var ds = d.stock && typeof d.stock === 'object' ? d.stock : {};
       Object.keys(ds).forEach(function (t) {
         var n = ds[t], c = state.stock[t];

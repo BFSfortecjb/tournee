@@ -15,17 +15,24 @@
   function r2(n) { return Math.round(n * 100) / 100; }
 
   /* ---------- bilan ---------- */
-  var GROUP_LABEL = { team: 'Équipe', quartier: 'Quartier', day: 'Jour' };
+  var GROUP_LABEL = { team: 'Équipe', quartier: 'Quartier', day: 'Jour', souche: 'Souche' };
+  function calTxt(b) {
+    var x = [];
+    if (b.gift) x.push(b.gift + ' donnés');
+    if (b.cs) x.push(b.cs + ' autre CS');
+    return b.cal + (x.length ? ' <small>(dont ' + x.join(', ') + ')</small>' : '');
+  }
 
   function renderSummary() {
     var f = T.store.finance(), a = f.all;
     var kpis = [
       ['Total collecté', fmt(a.total), '#1d2024'],
+      ['Don moyen (' + a.nPaid + ' dons payants)', fmt(a.avg), '#1d2024'],
       ['Espèces', fmt(a.esp), '#2e9e4f'],
       ['Chèques', fmt(a.chq), '#f0952b'],
       ['Calendriers distribués', String(a.cal), '#1d2024'],
       ['Vendus (contre un don)', String(a.sold), '#2e9e4f'],
-      ['Donnés / gardés', a.gift + ' / ' + a.kept, '#8a8f98']
+      ['Donnés / autre CS / gardés', a.gift + ' / ' + a.cs + ' / ' + a.kept, '#8a8f98']
     ];
     T.$('#finKpi').innerHTML = kpis.map(function (k) {
       return '<div class="kpi" style="border-left-color:' + k[2] + '"><b style="font-size:20px">' + T.esc(k[1]) + '</b><span>' + T.esc(k[0]) + '</span></div>';
@@ -34,15 +41,18 @@
     T.$$('#finGroups .chip').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-g') === group); });
     var rows = f[group], keys = Object.keys(rows).sort(function (x, y) { return x.localeCompare(y, 'fr'); });
     T.$('#finTable').innerHTML = keys.length
-      ? '<table><tr><th>' + GROUP_LABEL[group] + '</th><th>Total</th><th>Esp.</th><th>Chq.</th><th>Calendriers</th></tr>' +
+      ? '<table><tr><th>' + GROUP_LABEL[group] + '</th><th>Total</th><th>Esp.</th><th>Chq.</th><th>Moy.</th><th>Calendriers</th></tr>' +
         keys.map(function (k) {
           var b = rows[k];
-          return '<tr><td>' + T.esc(k) + '</td><td>' + fmt(b.total) + '</td><td>' + fmt(b.esp) + '</td><td>' + fmt(b.chq) + '</td><td>' + b.cal + (b.gift ? ' <small>(dont ' + b.gift + ' donnés)</small>' : '') + '</td></tr>';
+          return '<tr><td>' + T.esc(k) + '</td><td>' + fmt(b.total) + '</td><td>' + fmt(b.esp) + '</td><td>' + fmt(b.chq) + '</td><td>' + (b.nPaid ? fmt(b.avg) : '—') + '</td><td>' + calTxt(b) + '</td></tr>';
         }).join('') +
-        '<tr><th>Total</th><th>' + fmt(a.total) + '</th><th>' + fmt(a.esp) + '</th><th>' + fmt(a.chq) + '</th><th>' + a.cal + (a.gift ? ' <small>(dont ' + a.gift + ' donnés)</small>' : '') + '</th></tr></table>'
+        (group === 'souche' ? '' : '<tr><th>Total</th><th>' + fmt(a.total) + '</th><th>' + fmt(a.esp) + '</th><th>' + fmt(a.chq) + '</th><th>' + (a.nPaid ? fmt(a.avg) : '—') + '</th><th>' + calTxt(a) + '</th></tr>') + '</table>' +
+        (group === 'souche' ? '<p class="hint">Dons sans n° de souche : ils apparaissent sur la ligne « sans n° de souche ». Le n° se note dans la fiche, à côté du don.</p>' : '')
       : '<p class="hint">Aucun don saisi pour l\'instant. Ouvrez une habitation, notez le montant et le paiement, puis touchez « Passé ».</p>';
 
     renderStock();
+    renderIndemnite();
+    renderHisto();
     renderReceipts();
   }
 
@@ -62,12 +72,38 @@
   }
   function renderStockTable() {
     var C = T.store.calendriers();
-    T.$('#stockTable').innerHTML = '<table><tr><th>Personne</th><th>Reçus</th><th>Vendus</th><th>Donnés</th><th>Gardés</th><th>Rendus</th><th>Écart</th></tr>' +
+    T.$('#stockTable').innerHTML = '<table><tr><th>Personne</th><th>Reçus</th><th>Vendus</th><th>Donnés</th><th>Autre CS</th><th>Gardés</th><th>Rendus</th><th>Écart</th></tr>' +
       C.rows.map(function (r) {
-        return '<tr><td>' + T.esc(r.who) + '</td><td>' + (r.recu === null ? '—' : r.recu) + '</td><td>' + r.sold + '</td><td>' + r.gift + '</td><td>' + r.kept + '</td><td>' + (r.rendu === null ? '—' : r.rendu) + '</td>' +
+        return '<tr><td>' + T.esc(r.who) + '</td><td>' + (r.recu === null ? '—' : r.recu) + '</td><td>' + r.sold + '</td><td>' + r.gift + '</td><td>' + r.cs + '</td><td>' + r.kept + '</td><td>' + (r.rendu === null ? '—' : r.rendu) + '</td>' +
           (r.ecart === null ? '<td class="hint">à saisir</td>' : r.ecart === 0 ? '<td class="ok">OK</td>' : '<td class="ko">' + (r.ecart > 0 ? '+' : '') + r.ecart + '</td>') + '</tr>';
-      }).join('') + '<tr><th>Total</th><th>' + C.rows.reduce(function (s, r) { return s + (r.recu || 0); }, 0) + '</th><th>' + C.all.sold + '</th><th>' + C.all.gift + '</th><th>' + C.all.kept + '</th><th>' + C.rows.reduce(function (s, r) { return s + (r.rendu || 0); }, 0) + '</th><th></th></tr></table>' +
-      '<p class="hint">Écart = reçus − vendus − donnés − gardés − rendus. À 0, tous les calendriers sont justifiés. Positif : il manque des calendriers.</p>';
+      }).join('') + '<tr><th>Total</th><th>' + C.rows.reduce(function (s, r) { return s + (r.recu || 0); }, 0) + '</th><th>' + C.all.sold + '</th><th>' + C.all.gift + '</th><th>' + C.all.cs + '</th><th>' + C.all.kept + '</th><th>' + C.rows.reduce(function (s, r) { return s + (r.rendu || 0); }, 0) + '</th><th></th></tr></table>' +
+      '<p class="hint">Autre CS = calendriers donnés à d\'autres centres (échange entre casernes). Écart = reçus − vendus − donnés − autre CS − gardés − rendus. À 0, tous les calendriers sont justifiés. Positif : il manque des calendriers.</p>';
+  }
+
+  /* ---------- indemnisation des distributeurs ---------- */
+  function renderIndemnite() {
+    var I = T.store.indemnite();
+    // on ne touche pas aux champs pendant la saisie
+    if (!(document.activeElement && document.activeElement.closest && document.activeElement.closest('#indForm'))) {
+      T.$('#indRate').value = String(I.rate).replace('.', ',');
+      T.$('#indFixe').value = String(I.fixe).replace('.', ',');
+      T.$('#indNb').value = I.nb;
+    }
+    T.$('#indRes').innerHTML = '<table><tr><td>' + I.dist + ' calendriers × ' + fmt(I.rate) + ' + forfait ' + fmt(I.fixe) + '</td><td class="n"><b>' + fmt(I.cost) + '</b></td></tr>' +
+      '<tr><td>Par personne (' + I.nb + ')</td><td class="n"><b>' + fmt(I.each) + '</b></td></tr>' +
+      '<tr><td>Total collecté − coût</td><td class="n"><b>' + fmt(I.net) + '</b></td></tr></table>';
+  }
+
+  /* ---------- comparaison avec les années passées ---------- */
+  function renderHisto() {
+    var I = T.store.indemnite(), rows = T.histoCompare();
+    function d(v) { return v == null ? '—' : '<span class="' + (v >= 0 ? 'ok' : 'ko') + '">' + (v > 0 ? '+' : '') + fmt(v) + '</span>'; }
+    T.$('#histoTable').innerHTML = '<table><tr><th>Année</th><th>Total</th><th>Écart</th><th>Net</th><th>Écart</th></tr>' +
+      '<tr><td><b>' + T.TOURNEE.year + '</b></td><td><b>' + fmt(I.total) + '</b></td><td></td><td><b>' + fmt(I.net) + '</b></td><td></td></tr>' +
+      rows.map(function (r) {
+        return '<tr><td>' + r.y + '</td><td>' + fmt(r.total) + '</td><td>' + d(r.dTotal) + '</td><td>' + (r.net == null ? '—' : fmt(r.net)) + '</td><td>' + d(r.dNet) + '</td></tr>';
+      }).join('') + '</table>' +
+      '<p class="hint">Écart = cette année moins l\'année du tableau. Net = total collecté moins le coût des calendriers. 2020 : pas de tournée.</p>';
   }
 
   /* ---------- reçus / factures ---------- */
@@ -163,8 +199,15 @@
       '<div class="grid" id="finKpi"></div>' +
       '<div class="card"><h3>Bilan</h3>' +
         '<div id="finGroups" class="chips" style="margin-bottom:8px"><button class="chip on" data-g="team">Par équipe</button>' +
-        '<button class="chip" data-g="quartier">Par quartier</button><button class="chip" data-g="day">Par jour</button></div>' +
-        '<div id="finTable"></div></div>' +
+        '<button class="chip" data-g="quartier">Par quartier</button><button class="chip" data-g="day">Par jour</button><button class="chip" data-g="souche">Par souche</button></div>' +
+        '<div id="finTable" style="overflow-x:auto"></div></div>' +
+      '<div class="card"><h3>Indemnisation des distributeurs</h3>' +
+        '<form id="indForm"><div class="row"><label class="grow">€ par calendrier distribué<input id="indRate" type="text" inputmode="decimal"></label>' +
+        '<label class="grow">Forfait (€)<input id="indFixe" type="text" inputmode="decimal"></label>' +
+        '<label class="grow">Nb de personnes<input id="indNb" type="number" min="1" inputmode="numeric"></label></div>' +
+        '<button class="btn-main" type="submit">Enregistrer les paramètres</button></form>' +
+        '<div id="indRes" style="margin-top:10px"></div></div>' +
+      '<div class="card"><h3>Comparaison avec les années passées</h3><div id="histoTable" style="overflow-x:auto"></div></div>' +
       '<div class="card"><h3>Caisse</h3>' +
         '<div class="row"><label class="grow">Personne<select id="caisseTeam"></select></label>' +
         '<label class="grow">Jour<select id="caisseDay"></select></label></div>' +
@@ -210,6 +253,16 @@
       T.toast('Stock enregistré');
       if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
       renderStock();
+    });
+    T.$('#indForm').addEventListener('submit', function (e) {
+      e.preventDefault();
+      function n(id) { return parseFloat(String(T.$(id).value).replace(',', '.')); }
+      var r = n('#indRate'), f = n('#indFixe'), nb = parseInt(T.$('#indNb').value, 10);
+      if (isNaN(r) || r < 0 || isNaN(f) || f < 0 || !(nb >= 1)) { T.toast('Valeurs invalides (nombres positifs, au moins 1 personne)'); return; }
+      T.store.setParams(r, f, nb);
+      T.toast('Paramètres enregistrés');
+      if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+      renderIndemnite(); renderHisto();
     });
     T.$('#btnRestit').addEventListener('click', function () { T.bordereau.openRestitution(); });
     T.$('#btnBordereau').addEventListener('click', function () { T.bordereau.open(); });

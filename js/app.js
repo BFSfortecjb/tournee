@@ -90,6 +90,7 @@
     T.$('#fAmount').parentNode.classList.toggle('hidden', pay !== 'esp' && pay !== 'chq' && pay !== '');
     T.$('#rowEmail').classList.toggle('hidden', !T.$('#fReceipt').checked);
     T.$('#rowCal').classList.toggle('hidden', !pay);
+    T.$('#rowSouche').classList.toggle('hidden', pay !== 'esp' && pay !== 'chq');
     T.$('#rowMotif').classList.toggle('hidden', pay !== 'gratuit');
   }
 
@@ -105,7 +106,7 @@
     if (pay === 'gratuit' && !motif) { T.toast('Choisissez le motif du calendrier gratuit'); return null; }
     var cal = pay ? parseInt(T.$('#fCal').value, 10) : 0;
     if (pay && !(cal > 0)) { T.toast('Indiquez le nombre de calendriers remis (1 au minimum)'); return null; }
-    return { pay: pay, amount: amount, cal: cal, motif: motif, donor: T.$('#fDonor').value.trim(),
+    return { pay: pay, amount: amount, cal: cal, motif: motif, souche: (pay === 'esp' || pay === 'chq') ? T.$('#fSouche').value.trim() : '', donor: T.$('#fDonor').value.trim(),
       receipt: T.$('#fReceipt').checked, email: T.$('#fReceipt').checked ? T.$('#fEmail').value.trim() : '' };
   }
 
@@ -137,6 +138,7 @@
     T.$('#fAmount').value = h && h.pay && h.pay !== 'gratuit' && h.amount != null ? String(h.amount).replace('.', ',') : '';
     T.$('#fMotif').value = h && h.motif || '';
     T.$('#fCal').value = h && h.pay ? (h.cal > 0 ? h.cal : 1) : 1;
+    T.$('#fSouche').value = h && h.souche || '';
     T.$('#fDonor').value = h && h.donor || '';
     T.$('#fReceipt').checked = !!(h && h.receipt);
     T.$('#fEmail').value = h && h.email || '';
@@ -179,7 +181,7 @@
     if (don.pay && status !== 'passe') { T.toast('Un don se saisit avec le statut « Passé »'); return; }
     if (cur.id) {
       T.store.update(cur.id, { street: street, number: number, unit: unit, note: note, dog: dog, status: status,
-        pay: don.pay, amount: don.amount, cal: don.cal, motif: don.motif, donor: don.donor, receipt: don.receipt, email: don.email }, { visit: true });
+        pay: don.pay, amount: don.amount, cal: don.cal, motif: don.motif, donor: don.donor, receipt: don.receipt, email: don.email, souche: don.souche }, { visit: true });
     } else {
       var count = Math.max(1, Math.min(60, parseInt(T.$('#fCount').value, 10) || 1));
       if (count === 1) {
@@ -188,7 +190,7 @@
         });
         if (dup) { T.toast('Cette habitation existe déjà : précisez le logement (ex. Apt 2)'); return; }
         T.store.add({ street: street, number: number, unit: unit, note: note, dog: dog, status: status, lat: cur.lat, lng: cur.lng,
-          pay: don.pay, amount: don.amount, cal: don.cal, motif: don.motif, donor: don.donor, receipt: don.receipt, email: don.email });
+          pay: don.pay, amount: don.amount, cal: don.cal, motif: don.motif, donor: don.donor, receipt: don.receipt, email: don.email, souche: don.souche });
       } else {
         // Immeuble : plusieurs logements créés d'un coup à la même adresse
         for (var i = 1; i <= count; i++) {
