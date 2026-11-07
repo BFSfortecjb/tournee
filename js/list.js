@@ -6,6 +6,10 @@
   'use strict';
   var T = window.Tour;
   var filter = 'all', quartier = 'all';
+  // Rues dépliées (par défaut tout est replié) ; mémorisé sur cet appareil seulement
+  var FOLD_KEY = 'bfs_tournee_open_v1', open = loadOpen();
+  function loadOpen() { try { return JSON.parse(localStorage.getItem(FOLD_KEY)) || {}; } catch (e) { return {}; } }
+  function saveOpen() { try { localStorage.setItem(FOLD_KEY, JSON.stringify(open)); } catch (e) { /* ignore */ } }
 
   function renderFilters() {
     var s = T.store.stats();
@@ -31,16 +35,26 @@
         : 'Aucune habitation pour l\'instant.<br>Ajoutez une rue ici, ou touchez la carte avec le bouton ＋.') + '</p>';
       return;
     }
-    var html = '', cur = null;
+    var html = '', cur = null, isOpen = false;
     var all = T.store.all();
+    // Totaux par rue calculés une seule fois
+    var tot = {}, vis = {}, rep = {};
+    all.forEach(function (x) {
+      var k = x.street || '(sans rue)';
+      tot[k] = (tot[k] || 0) + 1;
+      if (x.status !== 'todo') vis[k] = (vis[k] || 0) + 1;
+      if (x.status === 'repasser') rep[k] = (rep[k] || 0) + 1;
+    });
     list.forEach(function (h) {
       var street = h.street || '(sans rue)';
       if (street !== cur) {
         cur = street;
-        var inStreet = all.filter(function (x) { return (x.street || '(sans rue)') === street; });
-        var done = inStreet.filter(function (x) { return x.status !== 'todo'; }).length;
-        html += '<div class="street-h"><span>' + T.esc(street) + '</span><small>' + done + '/' + inStreet.length + ' visitées</small></div>';
+        isOpen = !!open[street];
+        html += '<div class="street-h' + (isOpen ? ' open' : '') + '" data-street="' + T.esc(street) + '">' +
+          '<span><i class="chev">' + (isOpen ? '▾' : '▸') + '</i> ' + T.esc(street) + '</span>' +
+          '<small>' + (rep[street] ? '<b class="rep">' + rep[street] + ' à repasser</b> · ' : '') + (vis[street] || 0) + '/' + tot[street] + ' visitées</small></div>';
       }
+      if (!isOpen) return;
       html += '<div class="row-h" data-id="' + h.id + '">' +
         '<div class="pin s-' + h.status + '">' + T.esc(String(h.number || '').slice(0, 4)) + '</div>' +
         '<div class="main"><b>' + T.esc(street) + ' ' + T.esc(h.number) + (h.unit ? ' · ' + T.esc(h.unit) : '') + (h.dog ? ' 🐶' : '') + '</b>' +
@@ -62,8 +76,21 @@
       render();
     });
     T.$('#listBody').addEventListener('click', function (e) {
+      var sh = e.target.closest('[data-street]');
+      if (sh) {
+        var name = sh.getAttribute('data-street');
+        if (open[name]) delete open[name]; else open[name] = 1;
+        saveOpen(); render();
+        return;
+      }
       var r = e.target.closest('[data-id]');
       if (r) T.app.openSheet(r.getAttribute('data-id'));
+    });
+    T.$('#btnFoldAll').addEventListener('click', function () { open = {}; saveOpen(); render(); });
+    T.$('#btnUnfoldAll').addEventListener('click', function () {
+      T.store.streets().forEach(function (s) { open[s] = 1; });
+      open['(sans rue)'] = 1;
+      saveOpen(); render();
     });
     T.$('#btnToggleRange').addEventListener('click', function () {
       T.$('#rangeForm').classList.toggle('hidden');

@@ -330,6 +330,7 @@
     T.list.init();
     T.imp.init();
     T.finance.init();
+    T.pull.init();
     T.store.dedupe();               // nettoie d'éventuels doublons déjà présents
     T.sync.init();
     refresh();

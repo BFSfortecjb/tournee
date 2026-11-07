@@ -138,3 +138,14 @@ td.ok{color:var(--c-passe);font-weight:700} td.ko{color:var(--c-refus);font-weig
 
 /* chien (bulles de la carte) */
 .dogb{position:absolute;left:-9px;bottom:-8px;min-width:17px;height:17px;border-radius:50%;background:#fff;border:1px solid var(--line);font:normal 11px/15px system-ui;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,.4)}
+
+/* liste repliable */
+.street-h{cursor:pointer;position:sticky;top:-10px;z-index:2;background:var(--bg);padding:8px 2px;margin:6px 0 2px;border-bottom:1px solid var(--line);align-items:center}
+.street-h .chev{display:inline-block;width:16px;font-style:normal;color:var(--mut)}
+.street-h .rep{color:var(--c-repasser)}
+.fold-tools{display:flex;gap:6px;margin:0 0 4px}
+.view{overscroll-behavior-y:contain}
+
+/* tirer pour actualiser */
+.ptr{position:absolute;left:0;right:0;top:0;z-index:900;display:flex;justify-content:center;pointer-events:none;transition:transform .15s}
+.ptr span{margin-top:8px;background:#1d2024;color:#fff;border-radius:16px;padding:6px 14px;font-size:13px}
