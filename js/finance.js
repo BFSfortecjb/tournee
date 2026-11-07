@@ -8,7 +8,7 @@
   var T = window.Tour;
   var ESP = [200, 100, 50, 20, 10, 5, 2, 1, 0.5, 0.2, 0.1, 0.05, 0.02, 0.01];
   var CHQ = [150, 100, 75, 50, 40, 35, 30, 25, 20, 15, 12, 10, 8, 5];
-  var group = 'team', caisseTeam = '';
+  var group = 'team', caisseTeam = '', caisseDay = '';
   var fmt = function (n) { return T.money.fmt(n); };
 
   function active() { return T.$('#view-dons').classList.contains('active'); }
@@ -23,9 +23,9 @@
       ['Total collecté', fmt(a.total), '#1d2024'],
       ['Espèces', fmt(a.esp), '#2e9e4f'],
       ['Chèques', fmt(a.chq), '#f0952b'],
-      ['Dons', String(a.n - a.gratuit), '#8a8f98'],
-      ['Gratuits', String(a.gratuit), '#8a8f98'],
-      ['Don moyen', fmt(a.n - a.gratuit ? a.total / (a.n - a.gratuit) : 0), '#8a8f98']
+      ['Calendriers distribués', String(a.cal), '#1d2024'],
+      ['Vendus (contre un don)', String(a.sold), '#2e9e4f'],
+      ['Donnés / gardés', a.gift + ' / ' + a.kept, '#8a8f98']
     ];
     T.$('#finKpi').innerHTML = kpis.map(function (k) {
       return '<div class="kpi" style="border-left-color:' + k[2] + '"><b style="font-size:20px">' + T.esc(k[1]) + '</b><span>' + T.esc(k[0]) + '</span></div>';
@@ -34,15 +34,40 @@
     T.$$('#finGroups .chip').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-g') === group); });
     var rows = f[group], keys = Object.keys(rows).sort(function (x, y) { return x.localeCompare(y, 'fr'); });
     T.$('#finTable').innerHTML = keys.length
-      ? '<table><tr><th>' + GROUP_LABEL[group] + '</th><th>Total</th><th>Esp.</th><th>Chq.</th><th>Dons</th></tr>' +
+      ? '<table><tr><th>' + GROUP_LABEL[group] + '</th><th>Total</th><th>Esp.</th><th>Chq.</th><th>Calendriers</th></tr>' +
         keys.map(function (k) {
           var b = rows[k];
-          return '<tr><td>' + T.esc(k) + '</td><td>' + fmt(b.total) + '</td><td>' + fmt(b.esp) + '</td><td>' + fmt(b.chq) + '</td><td>' + b.n + '</td></tr>';
+          return '<tr><td>' + T.esc(k) + '</td><td>' + fmt(b.total) + '</td><td>' + fmt(b.esp) + '</td><td>' + fmt(b.chq) + '</td><td>' + b.cal + (b.gift ? ' <small>(dont ' + b.gift + ' donnés)</small>' : '') + '</td></tr>';
         }).join('') +
-        '<tr><th>Total</th><th>' + fmt(a.total) + '</th><th>' + fmt(a.esp) + '</th><th>' + fmt(a.chq) + '</th><th>' + a.n + '</th></tr></table>'
+        '<tr><th>Total</th><th>' + fmt(a.total) + '</th><th>' + fmt(a.esp) + '</th><th>' + fmt(a.chq) + '</th><th>' + a.cal + (a.gift ? ' <small>(dont ' + a.gift + ' donnés)</small>' : '') + '</th></tr></table>'
       : '<p class="hint">Aucun don saisi pour l\'instant. Ouvrez une habitation, notez le montant et le paiement, puis touchez « Passé ».</p>';
 
+    renderStock();
     renderReceipts();
+  }
+
+  /* ---------- stock de calendriers ---------- */
+  var stockTeam = '';
+  function renderStock() {
+    var teams = teamList();
+    if (!stockTeam || teams.indexOf(stockTeam) < 0) stockTeam = teams.indexOf(T.store.team()) >= 0 ? T.store.team() : teams[0];
+    var sel = T.$('#stockTeam');
+    // on ne reconstruit pas les champs pendant la saisie
+    if (document.activeElement && document.activeElement.closest && document.activeElement.closest('#stockForm')) return renderStockTable();
+    sel.innerHTML = teams.map(function (t) { return '<option' + (t === stockTeam ? ' selected' : '') + '>' + T.esc(t) + '</option>'; }).join('');
+    var s = T.store.getStock(stockTeam);
+    T.$('#stRecu').value = s ? s.recu : '';
+    T.$('#stRendu').value = s ? s.rendu : '';
+    renderStockTable();
+  }
+  function renderStockTable() {
+    var C = T.store.calendriers();
+    T.$('#stockTable').innerHTML = '<table><tr><th>Personne</th><th>Reçus</th><th>Vendus</th><th>Donnés</th><th>Gardés</th><th>Rendus</th><th>Écart</th></tr>' +
+      C.rows.map(function (r) {
+        return '<tr><td>' + T.esc(r.who) + '</td><td>' + (r.recu === null ? '—' : r.recu) + '</td><td>' + r.sold + '</td><td>' + r.gift + '</td><td>' + r.kept + '</td><td>' + (r.rendu === null ? '—' : r.rendu) + '</td>' +
+          (r.ecart === null ? '<td class="hint">à saisir</td>' : r.ecart === 0 ? '<td class="ok">OK</td>' : '<td class="ko">' + (r.ecart > 0 ? '+' : '') + r.ecart + '</td>') + '</tr>';
+      }).join('') + '<tr><th>Total</th><th>' + C.rows.reduce(function (s, r) { return s + (r.recu || 0); }, 0) + '</th><th>' + C.all.sold + '</th><th>' + C.all.gift + '</th><th>' + C.all.kept + '</th><th>' + C.rows.reduce(function (s, r) { return s + (r.rendu || 0); }, 0) + '</th><th></th></tr></table>' +
+      '<p class="hint">Écart = reçus − vendus − donnés − gardés − rendus. À 0, tous les calendriers sont justifiés. Positif : il manque des calendriers.</p>';
   }
 
   /* ---------- reçus / factures ---------- */
@@ -66,6 +91,10 @@
     return l.length ? l : ['(sans équipe)'];
   }
 
+  function dayLabel(d) {
+    var p = d.split('-');
+    return p.length === 3 ? p[2] + '/' + p[1] + '/' + p[0] + (d === T.store.today() ? ' (aujourd\'hui)' : '') : d;
+  }
   function key(v) { return String(v).replace('.', '_'); }
 
   function table(title, denoms, kind, saved) {
@@ -80,13 +109,18 @@
   function buildCaisse() {
     var sel = T.$('#caisseTeam');
     var teams = teamList();
+    var days = T.store.caisseDays();
+    if (!caisseDay || days.indexOf(caisseDay) < 0) caisseDay = days[0];
+    T.$('#caisseDay').innerHTML = days.map(function (d) {
+      return '<option value="' + d + '"' + (d === caisseDay ? ' selected' : '') + '>' + dayLabel(d) + '</option>';
+    }).join('');
     if (!caisseTeam || teams.indexOf(caisseTeam) < 0) caisseTeam = teams.indexOf(T.store.team()) >= 0 ? T.store.team() : teams[0];
     sel.innerHTML = teams.map(function (t) { return '<option' + (t === caisseTeam ? ' selected' : '') + '>' + T.esc(t) + '</option>'; }).join('');
-    var saved = T.store.getCaisse(caisseTeam);
+    var saved = T.store.getCaisse(caisseTeam, caisseDay);
     T.$('#caisseBox').innerHTML = table('Espèces', ESP, 'esp', saved) + table('Chèques', CHQ, 'chq', saved) +
       '<label>Autres chèques (montant total en €)<input id="chqOther" type="text" inputmode="decimal" value="' + (saved && saved.chqOther ? String(saved.chqOther).replace('.', ',') : '') + '"></label>' +
       '<div id="caisseRes"></div>';
-    T.$('#caisseMsg').textContent = saved ? 'Dernier enregistrement : ' + new Date(saved.updated).toLocaleString('fr-FR') : 'Aucun comptage enregistré pour cette équipe.';
+    T.$('#caisseMsg').textContent = saved ? 'Dernier enregistrement : ' + new Date(saved.updated).toLocaleString('fr-FR') : 'Aucun comptage enregistré pour ce jour.';
     computeCaisse();
   }
 
@@ -111,7 +145,7 @@
       if (cell) cell.textContent = q ? fmt(d * q) : '';
     });
     counted.chq += Math.round(c.chqOther * 100);
-    var f = T.store.finance(), t = f.team[caisseTeam] || { esp: 0, chq: 0, total: 0 };
+    var t = T.store.financeDay(caisseTeam, caisseDay);
     function line(label, cnt, exp) {
       var diff = r2(cnt / 100 - exp);
       return '<tr><td>' + label + '</td><td>' + fmt(cnt / 100) + '</td><td>' + fmt(exp) + '</td>' +
@@ -119,7 +153,8 @@
     }
     T.$('#caisseRes').innerHTML = '<table><tr><th></th><th>Compté</th><th>Saisi</th><th>Écart</th></tr>' +
       line('Espèces', counted.esp, t.esp) + line('Chèques', counted.chq, t.chq) +
-      line('Total', counted.esp + counted.chq, t.esp + t.chq) + '</table>';
+      line('Total', counted.esp + counted.chq, t.esp + t.chq) + '</table>' +
+      '<p class="hint">' + t.n + ' don(s) saisi(s) ce jour-là' + (t.gratuit ? ' dont ' + t.gratuit + ' gratuit(s)' : '') + '. Enveloppe attendue : ' + fmt(t.esp + t.chq) + '.</p>';
   }
 
   /* ---------- démarrage ---------- */
@@ -131,10 +166,22 @@
         '<button class="chip" data-g="quartier">Par quartier</button><button class="chip" data-g="day">Par jour</button></div>' +
         '<div id="finTable"></div></div>' +
       '<div class="card"><h3>Caisse</h3>' +
-        '<label>Équipe<select id="caisseTeam"></select></label>' +
+        '<div class="row"><label class="grow">Personne<select id="caisseTeam"></select></label>' +
+        '<label class="grow">Jour<select id="caisseDay"></select></label></div>' +
         '<div id="caisseBox"></div>' +
         '<button id="btnCaisseSave" class="btn-main" type="button">Enregistrer le comptage</button>' +
         '<p id="caisseMsg" class="hint"></p></div>' +
+      '<div class="card"><h3>Calendriers : stock et restitution</h3>' +
+        '<form id="stockForm"><label>Personne<select id="stockTeam"></select></label>' +
+        '<div class="row"><label class="grow">Calendriers reçus au départ<input id="stRecu" type="number" min="0" inputmode="numeric"></label>' +
+        '<label class="grow">Calendriers rendus (non distribués)<input id="stRendu" type="number" min="0" inputmode="numeric"></label></div>' +
+        '<button id="btnStockSave" class="btn-main" type="submit">Enregistrer</button></form>' +
+        '<div id="stockTable" style="margin-top:10px;overflow-x:auto"></div>' +
+        '<button id="btnRestit" class="btn-sec" type="button" style="margin-top:8px;width:100%">Ouvrir le bordereau de restitution des calendriers</button></div>' +
+      '<div class="card"><h3>Bordereau commun — ' + T.esc(T.TOURNEE.titre) + '</h3>' +
+        '<p class="hint" style="margin-top:0">Une feuille à imprimer (ou enregistrer en PDF) avec les dons et les caisses comptées de tout le monde, par jour et par quartier, avec cases de signature.</p>' +
+        '<div class="btn-col"><button id="btnBordereau" class="btn-main" type="button">Ouvrir le bordereau</button>' +
+        '<button id="btnBordCsv" class="btn-sec" type="button">Exporter le tableau (CSV)</button></div></div>' +
       '<div class="card"><h3>Reçus et factures demandés</h3><p id="rcTxt" class="hint" style="margin-top:0"></p><div id="rcList"></div>' +
         '<div class="btn-col" style="margin-top:8px"><button id="btnRcCsv" class="btn-sec" type="button">Exporter les demandes de reçu (CSV)</button>' +
         '<button id="btnDonsCsv" class="btn-sec" type="button">Exporter tous les dons (CSV)</button></div></div>' +
@@ -145,9 +192,10 @@
       if (b) { group = b.getAttribute('data-g'); renderSummary(); }
     });
     T.$('#caisseTeam').addEventListener('change', function () { caisseTeam = this.value; buildCaisse(); });
+    T.$('#caisseDay').addEventListener('change', function () { caisseDay = this.value; buildCaisse(); });
     T.$('#caisseBox').addEventListener('input', computeCaisse);
     T.$('#btnCaisseSave').addEventListener('click', function () {
-      T.store.setCaisse(caisseTeam, readCaisse());
+      T.store.setCaisse(caisseTeam, caisseDay, readCaisse());
       T.toast('Comptage enregistré');
       buildCaisse();
     });
@@ -155,11 +203,24 @@
       var r = e.target.closest('[data-id]');
       if (r) T.app.openSheet(r.getAttribute('data-id'));
     });
+    T.$('#stockTeam').addEventListener('change', function () { stockTeam = this.value; var s = T.store.getStock(stockTeam); T.$('#stRecu').value = s ? s.recu : ''; T.$('#stRendu').value = s ? s.rendu : ''; });
+    T.$('#stockForm').addEventListener('submit', function (e) {
+      e.preventDefault();
+      T.store.setStock(stockTeam, T.$('#stRecu').value, T.$('#stRendu').value);
+      T.toast('Stock enregistré');
+      if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+      renderStock();
+    });
+    T.$('#btnRestit').addEventListener('click', function () { T.bordereau.openRestitution(); });
+    T.$('#btnBordereau').addEventListener('click', function () { T.bordereau.open(); });
+    T.$('#btnBordCsv').addEventListener('click', function () {
+      T.download('bordereau-tournee' + T.TOURNEE.num + '-' + new Date().toISOString().slice(0, 10) + '.csv', T.bordereau.csv(), 'text/csv;charset=utf-8');
+    });
     T.$('#btnRcCsv').addEventListener('click', function () {
-      T.download('recus-' + new Date().toISOString().slice(0, 10) + '.csv', T.store.exportDonsCSV(true), 'text/csv;charset=utf-8');
+      T.download('recus-tournee' + T.TOURNEE.num + '-' + new Date().toISOString().slice(0, 10) + '.csv', T.store.exportDonsCSV(true), 'text/csv;charset=utf-8');
     });
     T.$('#btnDonsCsv').addEventListener('click', function () {
-      T.download('dons-' + new Date().toISOString().slice(0, 10) + '.csv', T.store.exportDonsCSV(false), 'text/csv;charset=utf-8');
+      T.download('dons-tournee' + T.TOURNEE.num + '-' + new Date().toISOString().slice(0, 10) + '.csv', T.store.exportDonsCSV(false), 'text/csv;charset=utf-8');
     });
   }
 

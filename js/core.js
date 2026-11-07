@@ -6,7 +6,10 @@
   'use strict';
   var T = window.Tour = window.Tour || {};
 
-  T.VERSION = '0.9-test';
+  // Identité de la tournée (titre des exports et du bordereau)
+  T.TOURNEE = { num: 5, titre: 'Tournée de calendriers n°5', commune: 'Bannalec' };
+
+  T.VERSION = '0.11-test';
 
   T.STATUS = {
     todo:     { label: 'Pas visité', color: '#8a8f98' },
@@ -63,6 +66,8 @@
       return T.money.fmt(h.amount) + (h.pay === 'esp' ? ' espèces' : ' chèque');
     }
   };
+  // Motifs d'un calendrier gratuit
+  T.MOTIFS = { garde: 'Gardé', nouveau: 'Nouveaux habitants de la commune', ancien: 'Ancien pompier', echange: 'Échange entre casernes' };
   T.PAY = { esp: 'Espèces', chq: 'Chèque', gratuit: 'Gratuit' };
 
   T.download = function (filename, text, mime) {
