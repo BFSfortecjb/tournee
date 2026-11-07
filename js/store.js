@@ -385,17 +385,53 @@
     },
     // Un comptage par personne et par jour : clé « identifiant|AAAA-MM-JJ »
     today: today,
-    getCaisse: function (team, day) { return state.caisse[team + '|' + day] || null; },
+    // Plusieurs comptages possibles par personne et par jour (clé « identifiant|jour|n° ») ; les anciens (2 parties) restent lus.
+    // Un comptage supprimé reste en place, marqué « deleted », pour que la suppression se propage aux autres appareils.
+    countings: function (team, day) {
+      var out = [];
+      Object.keys(state.caisse).forEach(function (k) {
+        var c = state.caisse[k], p = k.split('|');
+        if (p.length < 2 || c.deleted) return;
+        if ((team != null && p[0] !== team) || (day != null && p[1] !== day)) return;
+        var t = T.store.caisseTotals(c);
+        out.push({ key: k, who: p[0], day: p[1], esp: c.esp || {}, chq: c.chq || {}, tEsp: t.esp, tChq: t.chq, chqOther: Number(c.chqOther) || 0, at: c.created || c.updated || '' });
+      });
+      return out.sort(function (a, b) { return a.at < b.at ? 1 : a.at > b.at ? -1 : 0; });
+    },
+    // Cumul des comptages d'une personne pour un jour : quantités par valeur + totaux en euros ; null s'il n'y en a pas
+    getCaisse: function (team, day) {
+      var l = T.store.countings(team, day);
+      if (!l.length) return null;
+      var r = { esp: {}, chq: {}, tEsp: 0, tChq: 0, n: l.length };
+      l.forEach(function (c) {
+        Object.keys(c.esp).forEach(function (d) { r.esp[d] = (r.esp[d] || 0) + c.esp[d]; });
+        Object.keys(c.chq).forEach(function (d) { r.chq[d] = (r.chq[d] || 0) + c.chq[d]; });
+        r.tEsp += c.tEsp; r.tChq += c.tChq;
+      });
+      r.tEsp = Math.round(r.tEsp * 100) / 100; r.tChq = Math.round(r.tChq * 100) / 100;
+      return r;
+    },
+    addCaisse: function (team, day, data) {
+      var now = new Date().toISOString(), k = team + '|' + day + '|c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+      state.caisse[k] = { esp: data.esp || {}, chq: data.chq || {}, chqOther: 0, created: now, updated: now };
+      save();
+      return k;
+    },
+    delCaisse: function (key) {
+      if (!state.caisse[key]) return;
+      state.caisse[key] = { deleted: true, updated: new Date().toISOString() };
+      save();
+    },
     teamsWithCaisse: function () {
       var seen = {};
-      Object.keys(state.caisse).forEach(function (k) { if (k.indexOf('|') > 0) seen[k.split('|')[0]] = 1; });
+      T.store.countings().forEach(function (c) { seen[c.who] = 1; });
       return Object.keys(seen);
     },
     // Jours connus : jours où un don a été saisi, jours déjà comptés, aujourd'hui (du plus récent au plus ancien)
     caisseDays: function () {
       var seen = {}; seen[today()] = 1;
       state.houses.forEach(function (h) { if (h.pay && h.paid_on) seen[h.paid_on] = 1; });
-      Object.keys(state.caisse).forEach(function (k) { if (k.indexOf('|') > 0) seen[k.split('|')[1]] = 1; });
+      T.store.countings().forEach(function (c) { seen[c.day] = 1; });
       return Object.keys(seen).sort().reverse();
     },
     // Dons saisis par une personne un jour donné (en euros)
@@ -432,18 +468,17 @@
     bordereau: function () {
       var keys = {};
       state.houses.forEach(function (h) { if (h.pay && h.paid_on) keys[(h.paid_by || h.team || '(sans équipe)') + '|' + h.paid_on] = 1; });
-      Object.keys(state.caisse).forEach(function (k) { if (k.indexOf('|') > 0) keys[k] = 1; });
+      T.store.countings().forEach(function (c) { keys[c.who + '|' + c.day] = 1; });
       var rows = Object.keys(keys).sort(function (a, b) {
         var x = a.split('|'), y = b.split('|');
         return x[1] < y[1] ? -1 : x[1] > y[1] ? 1 : x[0].localeCompare(y[0], 'fr');
       }).map(function (k) {
-        var p = k.split('|'), s = T.store.financeDay(p[0], p[1]), c = state.caisse[k] || null;
-        return { who: p[0], day: p[1], saisi: s, caisse: c, compte: c ? T.store.caisseTotals(c) : null };
+        var p = k.split('|'), s = T.store.financeDay(p[0], p[1]), c = T.store.getCaisse(p[0], p[1]);
+        return { who: p[0], day: p[1], saisi: s, caisse: c, compte: c ? { esp: c.tEsp, chq: c.tChq } : null, n: c ? c.n : 0 };
       });
       // Détail des coupures comptées (tous comptages confondus), utile pour la remise en banque
       var esp = {}, chq = {}, other = 0;
-      Object.keys(state.caisse).forEach(function (k) {
-        var c = state.caisse[k];
+      T.store.countings().forEach(function (c) {
         Object.keys(c.esp || {}).forEach(function (d) { esp[d] = (esp[d] || 0) + c.esp[d]; });
         Object.keys(c.chq || {}).forEach(function (d) { chq[d] = (chq[d] || 0) + c.chq[d]; });
         other += Number(c.chqOther) || 0;

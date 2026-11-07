@@ -142,17 +142,29 @@
   }
 
   // Chèques : pas de saisie à refaire. On liste ceux saisis ce jour-là (par montant) et on confirme chaque quantité.
-  function chequeTable(saved) {
-    var seen = T.store.chequesDay(caisseTeam, caisseDay), conf = saved && saved.chq || {};
-    var keys = Object.keys(seen);
-    Object.keys(conf).forEach(function (k) { if (keys.indexOf(k) < 0) keys.push(k); });   // chèque confirmé puis modifié ou supprimé
+  function chequeTable(prev) {
+    var seen = T.store.chequesDay(caisseTeam, caisseDay), done = prev ? prev.chq : {}, keys = [];
+    Object.keys(seen).forEach(function (k) { if (seen[k] - (done[k] || 0) > 0) keys.push(k); });   // reste à compter
     keys.sort(function (a, b) { return parseFloat(b.replace('_', '.')) - parseFloat(a.replace('_', '.')); });
-    if (!keys.length) return '<table class="caisse"><tr><th>Chèques</th></tr><tr><td class="hint">Aucun chèque saisi ce jour-là.</td></tr></table>';
-    return '<table class="caisse"><tr><th>Chèques</th><th>Saisis</th><th>Quantité</th><th>Confirmé</th></tr>' + keys.map(function (k) {
-      var d = parseFloat(k.replace('_', '.')), n = seen[k] || 0, isConf = conf[k] != null, q = isConf ? conf[k] : n;
-      return '<tr><td>' + fmt(d) + '</td><td>' + n + '</td><td><input type="number" min="0" step="1" inputmode="numeric" class="cqc" data-d="' + k + '" value="' + q + '"></td>' +
-        '<td><input type="checkbox" class="cqk" data-d="' + k + '"' + (isConf ? ' checked' : '') + '></td></tr>';
+    if (!keys.length) return '<table class="caisse"><tr><th>Chèques</th></tr><tr><td class="hint">' +
+      (Object.keys(seen).length ? 'Tous les chèques saisis ce jour-là sont déjà comptés.' : 'Aucun chèque saisi ce jour-là.') + '</td></tr></table>';
+    return '<table class="caisse"><tr><th>Chèques</th><th>À compter</th><th>Quantité</th><th>Confirmé</th></tr>' + keys.map(function (k) {
+      var d = parseFloat(k.replace('_', '.')), n = seen[k] - (done[k] || 0);
+      return '<tr><td>' + fmt(d) + '</td><td>' + n + '</td><td><input type="number" min="0" step="1" inputmode="numeric" class="cqc" data-d="' + k + '" data-n="' + n + '" value="' + n + '"></td>' +
+        '<td><input type="checkbox" class="cqk" data-d="' + k + '"></td></tr>';
     }).join('') + '</table><p class="hint">Cochez chaque ligne quand le nombre de chèques en main est bon (corrigez la quantité si besoin).</p>';
+  }
+
+  // Historique de tous les comptages (récents en premier), avec suppression
+  function renderCountHist() {
+    var box = T.$('#countHist');
+    if (!box) return;
+    var l = T.store.countings();
+    box.innerHTML = l.length ? '<table><tr><th>Quand</th><th>Qui / jour</th><th>Esp.</th><th>Chq.</th><th>Total</th><th></th></tr>' + l.map(function (c) {
+      var dt = c.at ? new Date(c.at).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
+      return '<tr><td>' + dt + '</td><td>' + T.esc(c.who) + '<br><small>' + dayLabel(c.day).replace(' (aujourd\'hui)', '') + '</small></td><td class="n">' + fmt(c.tEsp) + '</td><td class="n">' + fmt(c.tChq) + '</td><td class="n"><b>' + fmt(c.tEsp + c.tChq) + '</b></td>' +
+        '<td><button type="button" class="btn-danger" data-delcount="' + T.esc(c.key) + '">✕</button></td></tr>';
+    }).join('') + '</table>' : '<p class="hint">Aucun comptage enregistré.</p>';
   }
 
   function buildCaisse() {
@@ -165,10 +177,12 @@
     }).join('');
     if (!caisseTeam || teams.indexOf(caisseTeam) < 0) caisseTeam = teams.indexOf(T.store.team()) >= 0 ? T.store.team() : teams[0];
     sel.innerHTML = teams.map(function (t) { return '<option' + (t === caisseTeam ? ' selected' : '') + '>' + T.esc(t) + '</option>'; }).join('');
-    var saved = T.store.getCaisse(caisseTeam, caisseDay);
-    T.$('#caisseBox').innerHTML = table('Espèces', ESP, 'esp', saved) + chequeTable(saved) + '<div id="caisseRes"></div>';
-    T.$('#caisseMsg').textContent = saved ? 'Dernier enregistrement : ' + new Date(saved.updated).toLocaleString('fr-FR') : 'Aucun comptage enregistré pour ce jour.';
+    // Le formulaire repart toujours à zéro : chaque enregistrement est un comptage de plus (voir l'historique)
+    var prev = T.store.getCaisse(caisseTeam, caisseDay);
+    T.$('#caisseBox').innerHTML = table('Espèces', ESP, 'esp', null) + chequeTable(prev) + '<div id="caisseRes"></div>';
+    T.$('#caisseMsg').textContent = prev ? prev.n + ' comptage(s) déjà enregistré(s) pour ce jour : ' + fmt(prev.tEsp + prev.tChq) + '.' : 'Aucun comptage enregistré pour ce jour.';
     computeCaisse();
+    renderCountHist();
   }
 
   // Lecture des quantités saisies
@@ -195,16 +209,20 @@
       if (cell) cell.textContent = q ? fmt(d * q) : '';
     });
     Object.keys(c.chq).forEach(function (k) { counted.chq += Math.round(parseFloat(k.replace('_', '.')) * 100) * c.chq[k]; });
-    var seen = T.store.chequesDay(caisseTeam, caisseDay), todo = 0, diffq = 0;
-    Object.keys(seen).forEach(function (k) { if (c.chq[k] == null) todo++; });
-    Object.keys(c.chq).forEach(function (k) { if (c.chq[k] !== (seen[k] || 0)) diffq++; });
+    var prev = T.store.getCaisse(caisseTeam, caisseDay);
+    if (prev) { counted.esp += Math.round(prev.tEsp * 100); counted.chq += Math.round(prev.tChq * 100); }
+    var todo = 0, diffq = 0;
+    T.$$('#caisseBox .cqk').forEach(function (cb) {
+      var k = cb.getAttribute('data-d'), q = T.$('#caisseBox .cqc[data-d="' + k + '"]');
+      if (!cb.checked) todo++; else if (parseInt(q.value, 10) !== parseInt(q.getAttribute('data-n'), 10)) diffq++;
+    });
     var t = T.store.financeDay(caisseTeam, caisseDay);
     function line(label, cnt, exp) {
       var diff = r2(cnt / 100 - exp);
       return '<tr><td>' + label + '</td><td>' + fmt(cnt / 100) + '</td><td>' + fmt(exp) + '</td>' +
         '<td class="' + (Math.abs(diff) < 0.005 ? 'ok' : 'ko') + '">' + (Math.abs(diff) < 0.005 ? 'OK' : (diff > 0 ? '+' : '') + fmt(diff)) + '</td></tr>';
     }
-    T.$('#caisseRes').innerHTML = '<table><tr><th></th><th>Compté</th><th>Saisi</th><th>Écart</th></tr>' +
+    T.$('#caisseRes').innerHTML = '<table><tr><th></th><th>Compté' + (prev ? ' (cumul du jour)' : '') + '</th><th>Saisi</th><th>Écart</th></tr>' +
       line('Espèces', counted.esp, t.esp) + line('Chèques', counted.chq, t.chq) +
       line('Total', counted.esp + counted.chq, t.esp + t.chq) + '</table>' +
       (todo ? '<p class="hint" style="color:#d6402f">' + todo + ' montant(s) de chèques pas encore confirmé(s).</p>' : '') +
@@ -233,6 +251,7 @@
         '<div id="caisseBox"></div>' +
         '<button id="btnCaisseSave" class="btn-main" type="button">Enregistrer le comptage</button>' +
         '<p id="caisseMsg" class="hint"></p></div>' +
+      '<div class="card"><h3>Historique des comptages</h3><div id="countHist" style="overflow-x:auto"></div></div>' +
       '<div class="card"><h3>Calendriers : stock et restitution</h3>' +
         '<form id="stockForm"><label>Personne<select id="stockTeam"></select></label>' +
         '<div class="row"><label class="grow">Calendriers reçus au départ<input id="stRecu" type="number" min="0" inputmode="numeric"></label>' +
@@ -255,10 +274,18 @@
     });
     T.$('#caisseTeam').addEventListener('change', function () { caisseTeam = this.value; buildCaisse(); });
     T.$('#caisseDay').addEventListener('change', function () { caisseDay = this.value; buildCaisse(); });
+    T.$('#countHist').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-delcount]');
+      if (!b || !confirm('Supprimer ce comptage ? Les totaux de la caisse seront recalculés.')) return;
+      T.store.delCaisse(b.getAttribute('data-delcount'));
+      buildCaisse();
+    });
     T.$('#caisseBox').addEventListener('input', computeCaisse);
     T.$('#caisseBox').addEventListener('change', computeCaisse);
     T.$('#btnCaisseSave').addEventListener('click', function () {
-      T.store.setCaisse(caisseTeam, caisseDay, readCaisse());
+      var c = readCaisse();
+      if (!Object.keys(c.esp).length && !Object.keys(c.chq).length) { T.toast('Rien à enregistrer : saisissez des quantités ou confirmez des chèques'); return; }
+      T.store.addCaisse(caisseTeam, caisseDay, c);
       T.toast('Comptage enregistré');
       buildCaisse();
     });
@@ -300,7 +327,7 @@
   function init() {
     build();
     // Le formulaire de caisse n'est pas redessiné à chaque changement (pour ne pas perdre la saisie en cours)
-    T.bus.on('change', function () { if (active()) { renderSummary(); computeCaisse(); } });
+    T.bus.on('change', function () { if (active()) { renderSummary(); computeCaisse(); renderCountHist(); } });
   }
 
   function show() { renderSummary(); buildCaisse(); }
