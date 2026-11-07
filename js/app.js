@@ -126,6 +126,7 @@
     T.$('#fUnit').value = h ? (h.unit || '') : '';
     T.$('#fNote').value = h ? h.note : '';
     T.$('#fCount').value = 1;
+    T.$('#fDog').checked = !!(h && h.dog);
     T.$('#fPay').value = h && h.pay || '';
     T.$('#fAmount').value = h && h.pay && h.pay !== 'gratuit' && h.amount != null ? String(h.amount).replace('.', ',') : '';
     T.$('#fDonor').value = h && h.donor || '';
@@ -163,12 +164,13 @@
     var number = T.$('#fNumber').value.trim();
     var unit = T.$('#fUnit').value.trim();
     var note = T.$('#fNote').value.trim();
+    var dog = T.$('#fDog').checked;
     if (!street && !number) { T.toast('Indiquez au moins une rue ou un numéro'); return; }
     var don = readDon();
     if (!don) return;
     if (don.pay && status !== 'passe') { T.toast('Un don se saisit avec le statut « Passé »'); return; }
     if (cur.id) {
-      T.store.update(cur.id, { street: street, number: number, unit: unit, note: note, status: status,
+      T.store.update(cur.id, { street: street, number: number, unit: unit, note: note, dog: dog, status: status,
         pay: don.pay, amount: don.amount, donor: don.donor, receipt: don.receipt, email: don.email }, { visit: true });
     } else {
       var count = Math.max(1, Math.min(60, parseInt(T.$('#fCount').value, 10) || 1));
@@ -177,12 +179,12 @@
           return (h.unit || '').toLowerCase() === unit.toLowerCase();
         });
         if (dup) { T.toast('Cette habitation existe déjà : précisez le logement (ex. Apt 2)'); return; }
-        T.store.add({ street: street, number: number, unit: unit, note: note, status: status, lat: cur.lat, lng: cur.lng,
+        T.store.add({ street: street, number: number, unit: unit, note: note, dog: dog, status: status, lat: cur.lat, lng: cur.lng,
           pay: don.pay, amount: don.amount, donor: don.donor, receipt: don.receipt, email: don.email });
       } else {
         // Immeuble : plusieurs logements créés d'un coup à la même adresse
         for (var i = 1; i <= count; i++) {
-          T.store.add({ street: street, number: number, unit: (unit ? unit + ' ' : 'Logt ') + i, note: note, status: status, lat: cur.lat, lng: cur.lng });
+          T.store.add({ street: street, number: number, unit: (unit ? unit + ' ' : 'Logt ') + i, note: note, dog: dog, status: status, lat: cur.lat, lng: cur.lng });
         }
       }
     }
@@ -285,6 +287,10 @@
     buildStatusBtns();
     buildBilan();
     bindLogin();
+    // La case « chien » s'enregistre tout de suite pour une habitation existante
+    T.$('#fDog').addEventListener('change', function () {
+      if (cur && cur.id) { T.store.update(cur.id, { dog: this.checked }); T.toast(this.checked ? '🐶 Chien noté' : 'Chien retiré'); }
+    });
     T.$('#fPay').addEventListener('change', syncDonUi);
     T.$('#fReceipt').addEventListener('change', syncDonUi);
     T.$('#btnClose').addEventListener('click', closeSheet);

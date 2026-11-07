@@ -24,9 +24,10 @@
     var st = group.length > 1 ? aggregate(group) : h.status;
     var txt = T.esc(String(h.number || '').slice(0, 4));
     var cnt = group.length > 1 ? '<b class="cnt">' + group.length + '</b>' : '';
+    var dog = group.some(function (x) { return x.dog; }) ? '<i class="dogb">🐶</i>' : '';
     return L.divIcon({
       className: '',
-      html: '<div class="pinw"><div class="pin s-' + st + '">' + txt + '</div>' + cnt + '</div>',
+      html: '<div class="pinw"><div class="pin s-' + st + '">' + txt + '</div>' + cnt + dog + '</div>',
       iconSize: [28, 28], iconAnchor: [14, 14]
     });
   }

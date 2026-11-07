@@ -6,7 +6,7 @@
   'use strict';
   var T = window.Tour = window.Tour || {};
 
-  T.VERSION = '0.7-test';
+  T.VERSION = '0.8-test';
 
   T.STATUS = {
     todo:     { label: 'Pas visité', color: '#8a8f98' },

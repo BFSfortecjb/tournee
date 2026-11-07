@@ -43,7 +43,7 @@
       }
       html += '<div class="row-h" data-id="' + h.id + '">' +
         '<div class="pin s-' + h.status + '">' + T.esc(String(h.number || '').slice(0, 4)) + '</div>' +
-        '<div class="main"><b>' + T.esc(street) + ' ' + T.esc(h.number) + (h.unit ? ' · ' + T.esc(h.unit) : '') + '</b>' +
+        '<div class="main"><b>' + T.esc(street) + ' ' + T.esc(h.number) + (h.unit ? ' · ' + T.esc(h.unit) : '') + (h.dog ? ' 🐶' : '') + '</b>' +
         '<small>' + ((h.visits || []).length > 1 ? (h.visits.length + ' passages · ') : '') + T.esc(h.note || '') + (h.lat == null ? ' · non placée sur la carte' : '') + '</small></div>' +
         '<span class="st">' + T.STATUS[h.status].label + '</span></div>';
     });

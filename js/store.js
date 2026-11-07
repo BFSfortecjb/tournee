@@ -101,6 +101,7 @@
         win.visits = unionVisits(win.visits, h.visits);
         if (win.lat == null && h.lat != null) { win.lat = h.lat; win.lng = h.lng; }
         if (!win.note && h.note) win.note = h.note;
+        if (!win.dog && h.dog) win.dog = true;
         if (!win.pay && h.pay) { ['pay', 'amount', 'donor', 'receipt', 'email', 'paid_on', 'paid_by'].forEach(function (f) { win[f] = h[f]; }); }
         if (!isDeleted(h.id)) state.deleted.push(h.id);
         removed++;
@@ -135,6 +136,7 @@
         lng: h.lng == null ? null : h.lng,
         status: h.status || 'todo',
         note: String(h.note || '').trim(),
+        dog: !!h.dog,
         amount: pay ? (h.amount == null ? null : h.amount) : null,
         pay: pay,
         donor: String(h.donor || '').trim(),

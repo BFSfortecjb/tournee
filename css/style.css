@@ -135,3 +135,6 @@ td.ok{color:var(--c-passe);font-weight:700} td.ko{color:var(--c-refus);font-weig
 /* tranche de numéros (import) */
 .imp-range{display:flex;align-items:center;gap:6px;padding:4px 10px 8px 42px;border-bottom:1px solid var(--line);font-size:13px;color:var(--mut)}
 .imp-range input{width:80px;margin:0;padding:5px 8px;font-size:14px}
+
+/* chien (bulles de la carte) */
+.dogb{position:absolute;left:-9px;bottom:-8px;min-width:17px;height:17px;border-radius:50%;background:#fff;border:1px solid var(--line);font:normal 11px/15px system-ui;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,.4)}
