@@ -106,6 +106,29 @@
       if (created) save();
       return created;
     },
+    // Ajoute des adresses importées (rue, numéro, lat, lng). Une habitation déjà créée
+    // sans position reçoit ses coordonnées ; les autres doublons sont ignorés.
+    addAddresses: function (items) {
+      var idx = {};
+      state.houses.forEach(function (h) { idx[h.street.toLowerCase() + '|' + String(h.number).toLowerCase()] = h; });
+      var created = 0, placed = 0, skipped = 0, now = new Date().toISOString();
+      items.forEach(function (a) {
+        var key = a.street.toLowerCase() + '|' + String(a.number).toLowerCase();
+        var ex = idx[key];
+        if (ex) {
+          if (ex.lat == null && a.lat != null) { ex.lat = a.lat; ex.lng = a.lng; ex.updated = now; placed++; }
+          else skipped++;
+          return;
+        }
+        var h = { id: T.uid(), street: a.street, number: String(a.number), lat: a.lat, lng: a.lng,
+          status: 'todo', note: '', team: '', updated: now };
+        state.houses.push(h);
+        idx[key] = h;
+        created++;
+      });
+      if (created || placed) save();
+      return { created: created, placed: placed, skipped: skipped };
+    },
     streets: function () {
       var seen = {};
       state.houses.forEach(function (h) { if (h.street) seen[h.street] = 1; });

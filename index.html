@@ -44,7 +44,10 @@
   <section id="view-list" class="view">
     <div class="toolbar">
       <div id="filters" class="chips"></div>
-      <button id="btnToggleRange" class="btn-sec">+ Ajouter une rue</button>
+      <div class="toolbar-btns">
+        <button id="btnOpenImp" class="btn-sec">Importer des adresses</button>
+        <button id="btnToggleRange" class="btn-sec">+ Rue</button>
+      </div>
     </div>
     <form id="rangeForm" class="card hidden">
       <h3>Ajouter une rue (liste de numéros)</h3>
@@ -101,6 +104,33 @@
   </div>
 </div>
 
+<!-- IMPORT D'ADRESSES -->
+<div id="imp" class="sheet hidden" role="dialog" aria-modal="true">
+  <div class="sheet-inner imp-inner">
+    <div class="sheet-head">
+      <h2>Importer des adresses</h2>
+      <button id="impClose" class="x" aria-label="Fermer">✕</button>
+    </div>
+    <p id="impSrc" class="hint" style="margin:0"></p>
+    <input id="impSearch" type="search" placeholder="Chercher une rue ou un lieu-dit…" autocomplete="off">
+    <div id="impKinds" class="chips">
+      <button class="chip on" data-k="all">Tout</button>
+      <button class="chip" data-k="rue">Rues</button>
+      <button class="chip" data-k="ld">Lieux-dits</button>
+    </div>
+    <div class="imp-actions">
+      <button id="impAll" class="btn-sec" type="button">Tout cocher (affichés)</button>
+      <button id="impNone" class="btn-sec" type="button">Tout décocher</button>
+    </div>
+    <div id="impList" class="imp-list"></div>
+    <p id="impSum" class="hint" style="margin:0"></p>
+    <button id="impGo" class="btn-main" type="button" disabled>Cochez des rues à importer</button>
+    <button id="btnImpFile" class="btn-sec" type="button">Autre commune : charger un CSV de la BAN</button>
+    <input id="impFile" type="file" accept=".csv,text/csv" class="hidden">
+    <p class="hint" style="margin:0;text-align:center">Source : Base Adresse Nationale (Licence Ouverte)</p>
+  </div>
+</div>
+
 <!-- CONNEXION -->
 <div id="login" class="login">
   <form id="loginForm" class="login-card" autocomplete="on">
@@ -125,6 +155,7 @@
 <script src="js/sync.js"></script>
 <script src="js/map.js"></script>
 <script src="js/list.js"></script>
+<script src="js/import.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

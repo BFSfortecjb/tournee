@@ -229,6 +229,7 @@
     T.bus.on('change', refresh);
     T.map.init();
     T.list.init();
+    T.imp.init();
     T.sync.init();
     refresh();
     if (T.sync.isOn()) hideLogin(); else showLogin();
