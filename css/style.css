@@ -137,6 +137,7 @@ td.ok{color:var(--c-passe);font-weight:700} td.ko{color:var(--c-refus);font-weig
 .imp-range input{width:80px;margin:0;padding:5px 8px;font-size:14px}
 
 /* chien (bulles de la carte) */
+.ffb{left:auto;right:-9px;bottom:auto;top:-8px}
 .dogb{position:absolute;left:-9px;bottom:-8px;min-width:17px;height:17px;border-radius:50%;background:#fff;border:1px solid var(--line);font:normal 11px/15px system-ui;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,.4)}
 
 /* liste repliable */
@@ -150,3 +151,28 @@ td.ok{color:var(--c-passe);font-weight:700} td.ko{color:var(--c-refus);font-weig
 .ptr{position:absolute;left:0;right:0;top:0;z-index:900;display:flex;justify-content:center;pointer-events:none;transition:transform .15s}
 .ptr span{margin-top:8px;background:#1d2024;color:#fff;border-radius:16px;padding:6px 14px;font-size:13px}
 .card td.n{text-align:right;white-space:nowrap}
+
+/* montants rapides (fiche d'une adresse) */
+.quick-l{font-size:12px;font-weight:700;color:#555;margin:8px 0 4px;text-transform:uppercase;letter-spacing:.04em}
+.quick{display:flex;gap:6px;margin-bottom:4px}
+.quick button{flex:1;padding:12px 0;font-size:17px;font-weight:700;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink)}
+.quick button.on{background:var(--c-passe);border-color:var(--c-passe);color:#fff}
+.quick.chq button.on{background:var(--c-repasser);border-color:var(--c-repasser)}
+.quick.misc button{font-weight:500;font-size:14px;color:#555}
+.quick.misc button.on{color:#fff}
+
+.twin{background:#fff4e0;border:1px solid #f0c27a;border-radius:10px;padding:10px;margin:8px 0;font-size:13px}
+.twin button{display:block;width:100%;margin-top:8px}
+.street-h .ren{border:0;background:transparent;font-size:15px;padding:2px 6px;color:#888}
+.row-h .place{padding:6px 10px;font-size:13px;margin-left:auto;flex:none}
+
+.sector-box{border:1px solid var(--line);border-radius:10px;padding:10px;margin:0 0 10px;background:#fff}
+.sector-box h4{margin:0 0 6px}
+.sector-box .srow{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--line)}
+.sector-box .srow .grow{flex:1;min-width:0}
+.sector-box .srow small{display:block;color:var(--muted,#666)}
+.sector-box .pick{max-height:220px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:4px 8px;margin:4px 0 8px}
+.sector-box .pick label.chk{padding:4px 0}
+.sector-box .acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.sector-box input[type=text]{width:100%;margin:2px 0 6px}
+.sec-tag{font-size:11px;color:#fff;background:#5b6b8c;border-radius:9px;padding:1px 7px;margin-left:6px;font-weight:600;vertical-align:1px}

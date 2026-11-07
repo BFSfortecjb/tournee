@@ -85,7 +85,40 @@
   }
 
   // Montant masqué si « gratuit » ou sans paiement ; e-mail visible seulement si reçu demandé
+  // Montants rapides : une touche choisit le montant et le paiement ; une 2e touche sur la même efface
+  function buildQuick() {
+    function row(kind, label) {
+      return '<p class="quick-l">' + label + '</p><div class="quick ' + kind + '">' + T.QUICK[kind].map(function (v) {
+        return '<button type="button" data-q="' + kind + '" data-v="' + v + '">' + v + '</button>';
+      }).join('') + '</div>';
+    }
+    T.$('#quickBox').innerHTML = row('esp', '💶 Espèces') + row('chq', '🧾 Chèque') +
+      '<div class="quick misc" style="margin-top:6px"><button type="button" data-q="gratuit">🎁 Gratuit</button><button type="button" data-q="autre">Autre montant…</button></div>';
+    T.$('#quickBox').addEventListener('click', function (e) {
+      var b = e.target.closest('button[data-q]');
+      if (!b) return;
+      var q = b.getAttribute('data-q'), pay = T.$('#fPay'), amt = T.$('#fAmount');
+      if (q === 'autre') {
+        if (pay.value !== 'esp' && pay.value !== 'chq') pay.value = 'esp';
+        syncDonUi(); amt.focus(); amt.select();
+        return;
+      }
+      if (b.classList.contains('on')) { pay.value = ''; amt.value = ''; }                 // même touche : on annule
+      else if (q === 'gratuit') { pay.value = 'gratuit'; amt.value = ''; }
+      else { pay.value = q; amt.value = b.getAttribute('data-v'); }
+      syncDonUi();
+    });
+  }
+  function updateQuick() {
+    var pay = T.$('#fPay').value, v = T.money.parse(T.$('#fAmount').value);
+    T.$$('#quickBox button[data-q]').forEach(function (b) {
+      var q = b.getAttribute('data-q');
+      b.classList.toggle('on', q === 'gratuit' ? pay === 'gratuit' : (q === pay && !isNaN(v) && v === parseFloat(b.getAttribute('data-v'))));
+    });
+  }
+
   function syncDonUi() {
+    updateQuick();
     var pay = T.$('#fPay').value;
     T.$('#fAmount').parentNode.classList.toggle('hidden', pay !== 'esp' && pay !== 'chq' && pay !== '');
     T.$('#rowEmail').classList.toggle('hidden', !T.$('#fReceipt').checked);
@@ -134,6 +167,7 @@
     T.$('#fNote').value = h ? h.note : '';
     T.$('#fCount').value = 1;
     T.$('#fDog').checked = !!(h && h.dog);
+    T.$('#fFF').checked = !!(h && h.ff);
     T.$('#fPay').value = h && h.pay || '';
     T.$('#fAmount').value = h && h.pay && h.pay !== 'gratuit' && h.amount != null ? String(h.amount).replace('.', ',') : '';
     T.$('#fMotif').value = h && h.motif || '';
@@ -174,13 +208,13 @@
     var number = T.$('#fNumber').value.trim();
     var unit = T.$('#fUnit').value.trim();
     var note = T.$('#fNote').value.trim();
-    var dog = T.$('#fDog').checked;
+    var dog = T.$('#fDog').checked, ff = T.$('#fFF').checked;
     if (!street && !number) { T.toast('Indiquez au moins une rue ou un numéro'); return; }
     var don = readDon();
     if (!don) return;
     if (don.pay && status !== 'passe') { T.toast('Un don se saisit avec le statut « Passé »'); return; }
     if (cur.id) {
-      T.store.update(cur.id, { street: street, number: number, unit: unit, note: note, dog: dog, status: status,
+      T.store.update(cur.id, { street: street, number: number, unit: unit, note: note, dog: dog, ff: ff, status: status,
         pay: don.pay, amount: don.amount, cal: don.cal, motif: don.motif, donor: don.donor, receipt: don.receipt, email: don.email, souche: don.souche }, { visit: true });
     } else {
       var count = Math.max(1, Math.min(60, parseInt(T.$('#fCount').value, 10) || 1));
@@ -189,12 +223,12 @@
           return (h.unit || '').toLowerCase() === unit.toLowerCase();
         });
         if (dup) { T.toast('Cette habitation existe déjà : précisez le logement (ex. Apt 2)'); return; }
-        T.store.add({ street: street, number: number, unit: unit, note: note, dog: dog, status: status, lat: cur.lat, lng: cur.lng,
+        T.store.add({ street: street, number: number, unit: unit, note: note, dog: dog, ff: ff, status: status, lat: cur.lat, lng: cur.lng,
           pay: don.pay, amount: don.amount, cal: don.cal, motif: don.motif, donor: don.donor, receipt: don.receipt, email: don.email, souche: don.souche });
       } else {
         // Immeuble : plusieurs logements créés d'un coup à la même adresse
         for (var i = 1; i <= count; i++) {
-          T.store.add({ street: street, number: number, unit: (unit ? unit + ' ' : 'Logt ') + i, note: note, dog: dog, status: status, lat: cur.lat, lng: cur.lng });
+          T.store.add({ street: street, number: number, unit: (unit ? unit + ' ' : 'Logt ') + i, note: note, dog: dog, ff: ff, status: status, lat: cur.lat, lng: cur.lng });
         }
       }
     }
@@ -332,10 +366,15 @@
     buildBilan();
     bindLogin();
     // La case « chien » s'enregistre tout de suite pour une habitation existante
+    T.$('#fFF').addEventListener('change', function () {
+      if (cur && cur.id) { T.store.update(cur.id, { ff: this.checked }); T.toast(this.checked ? '🧑‍🚒 Ancien pompier noté' : 'Ancien pompier retiré'); }
+    });
     T.$('#fDog').addEventListener('change', function () {
       if (cur && cur.id) { T.store.update(cur.id, { dog: this.checked }); T.toast(this.checked ? '🐶 Chien noté' : 'Chien retiré'); }
     });
+    buildQuick();
     T.$('#fPay').addEventListener('change', syncDonUi);
+    T.$('#fAmount').addEventListener('input', updateQuick);
     T.$('#fReceipt').addEventListener('change', syncDonUi);
     T.$('#btnClose').addEventListener('click', closeSheet);
     T.$('#sheet').addEventListener('click', function (e) { if (e.target === this) closeSheet(); });
@@ -356,7 +395,7 @@
       var h = cur && T.store.get(cur.id);
       if (!h) return;
       closeSheet(); showTab('map');
-      if (h.lat == null) T.toast('Pas encore placée sur la carte : utilisez « Placer / déplacer »');
+      if (h.lat == null) T.map.startPlacing(h.id);                    // pas encore placée : on propose de la placer
       else T.map.focus(h);
     });
     T.$('#btnPlace').addEventListener('click', function () {

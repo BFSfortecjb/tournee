@@ -9,7 +9,7 @@
   // Identité de la tournée (titre des exports et du bordereau)
   T.TOURNEE = { num: 5, titre: 'Tournée de calendriers n°5', commune: 'Bannalec' };
 
-  T.VERSION = '0.18-test';
+  T.VERSION = '0.22-test';
 
   T.STATUS = {
     todo:     { label: 'Pas visité', color: '#8a8f98' },
@@ -69,6 +69,8 @@
   };
   // Motifs d'un calendrier gratuit
   T.MOTIFS = { garde: 'Gardé', nouveau: 'Nouveaux habitants de la commune', ancien: 'Ancien pompier', echange: 'Échange entre casernes' };
+  // Montants proposés en une touche dans la fiche d'une adresse (espèces / chèque)
+  T.QUICK = { esp: [5, 10, 15, 20, 25], chq: [10, 15, 20, 30, 50] };
   T.PAY = { esp: 'Espèces', chq: 'Chèque', gratuit: 'Gratuit' };
 
   T.download = function (filename, text, mime) {

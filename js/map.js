@@ -26,6 +26,7 @@
     var txt = T.esc(String(h.number || '').slice(0, 4));
     var cnt = group.length > 1 ? '<b class="cnt">' + group.length + '</b>' : '';
     var dog = group.some(function (x) { return x.dog; }) ? '<i class="dogb">🐶</i>' : '';
+    if (group.some(function (x) { return x.ff; })) dog += '<i class="dogb ffb">🧑‍🚒</i>';
     return L.divIcon({
       className: '',
       html: '<div class="pinw"><div class="pin s-' + st + '">' + txt + '</div>' + cnt + dog + '</div>',
@@ -76,7 +77,16 @@
   function startPlacing(id) {
     placingId = id;
     setAddMode(false);
+    var h = T.store.get(id);
+    T.$('#placeTxt').textContent = 'Touchez la carte pour placer ' + (h ? h.street + ' ' + h.number : 'l\'habitation');
     T.$('#placeBanner').classList.remove('hidden');
+    // On cadre la carte sur la rue : les autres numéros déjà placés servent de repère
+    if (h && map) {
+      var pts = T.store.all().filter(function (x) { return x.street === h.street && x.lat != null; })
+        .map(function (x) { return [x.lat, x.lng]; });
+      if (h.lat != null) map.setView([h.lat, h.lng], Math.max(map.getZoom(), 18));
+      else if (pts.length) map.fitBounds(pts, { padding: [60, 60], maxZoom: 18 });
+    }
   }
   function stopPlacing() {
     placingId = null;

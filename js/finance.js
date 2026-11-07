@@ -21,7 +21,7 @@
     var x = [];
     if (b.gift) x.push(b.gift + ' donnés');
     if (b.cs) x.push(b.cs + ' autre CS');
-    return b.cal + (x.length ? ' <small>(dont ' + x.join(', ') + ')</small>' : '');
+    return b.cal + (x.length ? '<br><small>dont ' + x.join(', ') + '</small>' : '');
   }
 
   function renderSummary() {
@@ -42,7 +42,7 @@
     T.$$('#finGroups .chip').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-g') === group); });
     var rows = f[group], keys = Object.keys(rows).sort(function (x, y) { return x.localeCompare(y, 'fr'); });
     T.$('#finTable').innerHTML = keys.length
-      ? '<table><tr><th>' + GROUP_LABEL[group] + '</th><th>Total</th><th>Esp.</th><th>Chq.</th><th>Moy.</th><th>Calendriers</th></tr>' +
+      ? '<table><tr><th>' + GROUP_LABEL[group] + '</th><th>Total</th><th>Esp.</th><th>Chq.</th><th>Moy.</th><th>Cal.</th></tr>' +
         keys.map(function (k) {
           var b = rows[k];
           return '<tr><td>' + T.esc(k) + '</td><td>' + fmt(b.total) + '</td><td>' + fmt(b.esp) + '</td><td>' + fmt(b.chq) + '</td><td>' + (b.nPaid ? fmt(b.avg) : '—') + '</td><td>' + calTxt(b) + '</td></tr>';

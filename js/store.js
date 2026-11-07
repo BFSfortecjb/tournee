@@ -7,7 +7,7 @@
   'use strict';
   var T = window.Tour;
   var KEY = 'bfs_tournee_v1';
-  var state = { houses: [], settings: { team: '' }, deleted: [], caisse: {}, stock: {}, params: null };
+  var state = { houses: [], settings: { team: '' }, deleted: [], caisse: {}, stock: {}, params: null, sectors: {} };
 
   function load() {
     try {
@@ -21,6 +21,7 @@
           state.caisse = d.caisse && typeof d.caisse === 'object' ? d.caisse : {};
           state.stock = d.stock && typeof d.stock === 'object' ? d.stock : {};
           state.params = d.params && typeof d.params === 'object' ? d.params : null;
+          state.sectors = d.sectors && typeof d.sectors === 'object' ? d.sectors : {};
         }
       }
     } catch (e) { console.error('Lecture impossible', e); }
@@ -79,6 +80,10 @@
     for (var i = 0; i < str.length; i++) h = ((h * 33) ^ str.charCodeAt(i)) >>> 0;
     return 'a' + h.toString(36) + str.length.toString(36);
   }
+  // Clé de comparaison des noms de rue : sans majuscules, accents, tirets ni apostrophes
+  function skey(s) {
+    return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[-'’]/g, ' ').replace(/\s+/g, ' ').trim();
+  }
   function addrKey(h) {
     return String(h.street).toLowerCase().trim() + '|' + String(h.number).toLowerCase().trim() + '|' + String(h.unit || '').toLowerCase().trim();
   }
@@ -106,6 +111,7 @@
         if (win.lat == null && h.lat != null) { win.lat = h.lat; win.lng = h.lng; }
         if (!win.note && h.note) win.note = h.note;
         if (!win.dog && h.dog) win.dog = true;
+        if (!win.ff && h.ff) win.ff = true;
         if (!win.pay && h.pay) { ['pay', 'amount', 'cal', 'motif', 'donor', 'receipt', 'email', 'paid_on', 'paid_by'].forEach(function (f) { win[f] = h[f]; }); }
         if (!isDeleted(h.id)) state.deleted.push(h.id);
         removed++;
@@ -141,6 +147,7 @@
         status: h.status || 'todo',
         note: String(h.note || '').trim(),
         dog: !!h.dog,
+        ff: !!h.ff,
         amount: pay ? (h.amount == null ? null : h.amount) : null,
         pay: pay,
         cal: pay ? (parseInt(h.cal, 10) > 0 ? parseInt(h.cal, 10) : 1) : 0,
@@ -330,6 +337,43 @@
       });
       return res;
     },
+    /* Secteurs : groupes de quartiers et de rues (partagés). { id: {name, quartiers[], streets[], updated, deleted?} } */
+    sectors: function () {
+      return Object.keys(state.sectors).filter(function (id) { return !state.sectors[id].deleted; })
+        .map(function (id) { var s = state.sectors[id]; return { id: id, name: s.name, quartiers: s.quartiers || [], streets: s.streets || [] }; })
+        .sort(function (a, b) { return a.name.localeCompare(b.name, 'fr'); });
+    },
+    // Secteur d'une rue : l'affectation de la rue prime sur celle de son quartier
+    sectorOf: function (street) {
+      var k = skey(street), q = (T.quartierOf && T.quartierOf(street)) || '', byQ = '';
+      var list = T.store.sectors();
+      for (var i = 0; i < list.length; i++) {
+        if (list[i].streets.some(function (x) { return skey(x) === k; })) return list[i].name;
+        if (q && list[i].quartiers.indexOf(q) >= 0) byQ = list[i].name;
+      }
+      return byQ;
+    },
+    saveSector: function (id, name, quartiers, streets) {
+      name = String(name || '').replace(/\s+/g, ' ').trim();
+      if (!name) return null;
+      if (!id) id = 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+      var now = new Date().toISOString();
+      // une rue ou un quartier n'appartient qu'à un secteur : on le retire des autres
+      Object.keys(state.sectors).forEach(function (o) {
+        var s = state.sectors[o]; if (o === id || s.deleted) return;
+        var nq = (s.quartiers || []).filter(function (x) { return quartiers.indexOf(x) < 0; });
+        var ns = (s.streets || []).filter(function (x) { return !streets.some(function (y) { return skey(y) === skey(x); }); });
+        if (nq.length !== (s.quartiers || []).length || ns.length !== (s.streets || []).length) state.sectors[o] = { name: s.name, quartiers: nq, streets: ns, updated: now };
+      });
+      state.sectors[id] = { name: name, quartiers: quartiers.slice(), streets: streets.slice(), updated: now };
+      save();
+      return id;
+    },
+    deleteSector: function (id) {
+      if (!state.sectors[id]) return;
+      state.sectors[id] = { name: state.sectors[id].name, quartiers: [], streets: [], deleted: true, updated: new Date().toISOString() };
+      save();
+    },
     // Paramètres de l'indemnisation des distributeurs (partagés) : coût = tarif × calendriers distribués + forfait
     getParams: function () {
       var p = state.params || {};
@@ -496,11 +540,11 @@
     // Contenu partagé (sans les réglages propres à l'appareil)
     snapshot: function () {
       return JSON.stringify({ app: 'bfs-tournee', version: T.VERSION, saved: new Date().toISOString(),
-        houses: state.houses, deleted: state.deleted, caisse: state.caisse, stock: state.stock, params: state.params });
+        houses: state.houses, deleted: state.deleted, caisse: state.caisse, stock: state.stock, params: state.params, sectors: state.sectors });
     },
     exportJSON: function () {
       return JSON.stringify({ app: 'bfs-tournee', version: T.VERSION, exported: new Date().toISOString(),
-        houses: state.houses, deleted: state.deleted, caisse: state.caisse, stock: state.stock, params: state.params }, null, 2);
+        houses: state.houses, deleted: state.deleted, caisse: state.caisse, stock: state.stock, params: state.params, sectors: state.sectors }, null, 2);
     },
     exportCSV: function () {
       var rows = [['Rue', 'Numéro', 'Logement', 'Statut', 'Note', 'Équipe', 'Latitude', 'Longitude', 'Passages', 'Mis à jour']];
@@ -543,6 +587,11 @@
         if (n && (!c || (n.updated || '') > (c.updated || ''))) { state.caisse[t] = n; cch++; }
       });
       if (d.params && typeof d.params === 'object' && (!state.params || (d.params.updated || '') > (state.params.updated || ''))) { state.params = d.params; cch++; }
+      var dsec = d.sectors && typeof d.sectors === 'object' ? d.sectors : {};
+      Object.keys(dsec).forEach(function (id) {
+        var n = dsec[id], c = state.sectors[id];
+        if (n && (!c || (n.updated || '') > (c.updated || ''))) { state.sectors[id] = n; cch++; }
+      });
       var ds = d.stock && typeof d.stock === 'object' ? d.stock : {};
       Object.keys(ds).forEach(function (t) {
         var n = ds[t], c = state.stock[t];
@@ -560,6 +609,29 @@
       if (!d || d.app !== 'bfs-tournee') return { ok: false, msg: 'Ce fichier n\'est pas une sauvegarde de l\'appli' };
       return T.store.merge(d, false);
     },
+    // Rues écrites de plusieurs façons (« Venelle de poulgast » / « Venelle de Poulgast ») : [{ names, counts, best }]
+    streetTwins: function () {
+      var g = {};
+      state.houses.forEach(function (h) {
+        var k = skey(h.street);
+        if (!k) return;
+        g[k] = g[k] || {};
+        g[k][h.street] = (g[k][h.street] || 0) + 1;
+      });
+      return Object.keys(g).filter(function (k) { return Object.keys(g[k]).length > 1; }).map(function (k) {
+        var names = Object.keys(g[k]).sort(function (a, b) { return g[k][b] - g[k][a] || a.localeCompare(b, 'fr'); });
+        return { names: names, counts: g[k], best: names[0] };
+      });
+    },
+    // Renomme une rue (toutes ses habitations). Si une rue porte déjà ce nom, les deux sont fusionnées.
+    renameStreet: function (from, to) {
+      to = String(to || '').replace(/\s+/g, ' ').trim();
+      if (!to || from === to) return 0;
+      var n = 0, now = new Date().toISOString();
+      state.houses.forEach(function (h) { if (h.street === from) { h.street = to; h.updated = now; n++; } });
+      if (n) { T.store.dedupe(); save(); }
+      return n;
+    },
     // Restauration non destructive : ajoute les adresses d'une sauvegarde qui n'existent plus ici
     // (elles reçoivent un nouvel identifiant, car les anciens sont marqués supprimés chez tout le monde)
     restoreMissing: function (d) {
@@ -572,7 +644,7 @@
         h.id = T.uid(); h.updated = now; have[addrKey(h)] = 1;
         state.houses.push(h); n++;
       });
-      T.store.merge({ houses: [], deleted: [], caisse: d.caisse, stock: d.stock, params: d.params }, false);
+      T.store.merge({ houses: [], deleted: [], caisse: d.caisse, stock: d.stock, params: d.params, sectors: d.sectors }, false);
       save();
       return { ok: true, n: n, msg: n + ' adresse(s) restaurée(s)' };
     },

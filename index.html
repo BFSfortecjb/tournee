@@ -30,7 +30,7 @@
   <section id="view-map" class="view active">
     <div id="map"></div>
     <div id="addBanner" class="banner hidden">Mode ajout : touchez la carte à l'emplacement de l'habitation</div>
-    <div id="placeBanner" class="banner hidden">Touchez la carte pour placer l'habitation <button id="btnCancelPlace" class="mini">Annuler</button></div>
+    <div id="placeBanner" class="banner hidden"><span id="placeTxt">Touchez la carte pour placer l'habitation</span> <button id="btnCancelPlace" class="mini">Annuler</button></div>
     <form id="searchForm" class="map-search">
       <input id="searchInput" type="search" placeholder="Chercher une adresse…" autocomplete="off">
       <button type="submit">OK</button>
@@ -47,9 +47,12 @@
       <div id="filters" class="chips"></div>
       <div class="toolbar-btns">
         <button id="btnOpenImp" class="btn-sec">Importer des adresses</button>
+        <button id="btnSectors" class="btn-sec">Secteurs</button>
         <button id="btnToggleRange" class="btn-sec">+ Rue</button>
       </div>
     </div>
+    <div id="sectorBox" class="sector-box hidden"></div>
+    <select id="sFilter" class="q-select" aria-label="Secteur"></select>
     <select id="qFilter" class="q-select" aria-label="Quartier"></select>
     <div class="fold-tools">
       <button id="btnFoldAll" class="chip" type="button">▸ Tout replier</button>
@@ -109,9 +112,11 @@
     <label>Logement (immeuble : appartement, étage…)<input id="fUnit" type="text" placeholder="Ex : Apt 2, 1er étage" autocomplete="off"></label>
     <label id="rowCount">Nombre de logements à créer à cette adresse<input id="fCount" type="number" min="1" max="60" value="1" inputmode="numeric"></label>
     <label class="chk"><input id="fDog" type="checkbox"> 🐶 Chien à cette adresse</label>
+    <label class="chk"><input id="fFF" type="checkbox"> 🧑‍🚒 Ancien pompier à cette adresse</label>
     <label>Note (facultatif)<input id="fNote" type="text" placeholder="Ex : revenir après 18h, chien…" autocomplete="off"></label>
     <div class="don-box">
       <p class="sheet-label" style="margin-top:0">Don (facultatif)</p>
+      <div id="quickBox"></div>
       <div class="row">
         <label class="grow">Montant (€)<input id="fAmount" type="text" inputmode="decimal" placeholder="Ex : 10" autocomplete="off"></label>
         <label class="grow">Paiement<select id="fPay"><option value="">— aucun —</option><option value="esp">Espèces</option><option value="chq">Chèque</option><option value="gratuit">Gratuit (calendrier offert)</option></select></label>
