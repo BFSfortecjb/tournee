@@ -201,6 +201,17 @@
         '<div class="acts"><button type="button" class="btn-main" id="evSave">Enregistrer</button><button type="button" class="btn-sec" id="evCancel">Annuler</button>' +
         (evEdit ? '<button type="button" class="btn-danger" id="evDel">Supprimer</button>' : '') + '</div></div>';
     }
+    var A = T.AGENDA, have = {};
+    list.forEach(function (e) { have[e.title.toLowerCase() + '|' + e.date] = 1; });
+    var sugg = A ? A.items.filter(function (x) { return !have[x.title.toLowerCase() + '|' + x.date]; }) : [];
+    if (A && evEdit === null) {
+      html += '<div class="evagenda"><b>Agenda de la mairie</b> <small>(relevé du ' + new Date(A.releve + 'T12:00:00').toLocaleDateString('fr-FR') + ')</small>' +
+        (sugg.length ? sugg.map(function (x, i) {
+          return '<div class="srow"><div class="grow"><b>' + T.esc(x.title) + '</b><small>' + dayLabel(x.date) + (x.start ? ' · ' + x.start : '') + (x.note ? ' · ' + T.esc(x.note) : '') + '</small></div><button type="button" class="btn-sec" data-evadd="' + i + '">Ajouter</button></div>';
+        }).join('') + '<div class="acts" style="margin-top:6px"><button type="button" class="btn-sec" id="evAddAll">Tout ajouter</button></div>' : '<p class="hint" style="margin:4px 0">Tout est déjà ajouté.</p>') +
+        '<p class="hint" style="margin:6px 0 0">Seuls les événements d\'un jour sont proposés (période du 1/11 au 20/12, liste incomplète). <a href="' + A.url + '" target="_blank" rel="noopener">Ouvrir l\'agenda complet</a> pour en ajouter d\'autres à la main.</p></div>';
+      box.__sugg = sugg;
+    }
     if (list.length) {
       html += '<table class="evt"><tr><th>Quand</th><th>Événement</th><th></th></tr>' + list.map(function (e) {
         var when = e.repeat === 'weekly' ? 'Chaque ' + DAYS_FULL[dowOf(new Date(e.date + 'T12:00:00'))] + (e.until ? ' jusqu\'au ' + new Date(e.until + 'T12:00:00').toLocaleDateString('fr-FR') : '') : dayLabel(e.date);
@@ -265,7 +276,10 @@
     });
     T.$('#evBox').addEventListener('click', function (e) {
       var id = e.target.id, ed = e.target.getAttribute('data-evedit');
-      if (ed) { evEdit = ed; renderEvents(); }
+      var ad = e.target.getAttribute('data-evadd'), sg = T.$('#evBox').__sugg || [];
+      if (ad != null && sg[ad]) { T.store.saveEvent('', sg[ad]); T.toast('Événement ajouté'); renderEvents(); renderImpact(); }
+      else if (id === 'evAddAll') { sg.forEach(function (x) { T.store.saveEvent('', x); }); T.toast(sg.length + ' événement(s) ajouté(s)'); renderEvents(); renderImpact(); }
+      else if (ed) { evEdit = ed; renderEvents(); }
       else if (id === 'evNew') { evEdit = ''; renderEvents(); }
       else if (id === 'evCancel') { evEdit = null; renderEvents(); }
       else if (id === 'evSave') {
