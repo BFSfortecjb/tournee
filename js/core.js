@@ -9,7 +9,7 @@
   // Identité de la tournée (titre des exports et du bordereau)
   T.TOURNEE = { num: 5, titre: 'Tournée de calendriers n°5', commune: 'Bannalec' };
 
-  T.VERSION = '0.25-test';
+  T.VERSION = '0.26-test';
 
   T.STATUS = {
     todo:     { label: 'Pas visité', color: '#8a8f98' },

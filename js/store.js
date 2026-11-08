@@ -7,7 +7,7 @@
   'use strict';
   var T = window.Tour;
   var KEY = 'bfs_tournee_v1';
-  var state = { houses: [], settings: { team: '' }, deleted: [], caisse: {}, stock: {}, params: null, sectors: {} };
+  var state = { houses: [], settings: { team: '' }, deleted: [], caisse: {}, stock: {}, params: null, sectors: {}, events: {} };
 
   function load() {
     try {
@@ -22,6 +22,7 @@
           state.stock = d.stock && typeof d.stock === 'object' ? d.stock : {};
           state.params = d.params && typeof d.params === 'object' ? d.params : null;
           state.sectors = d.sectors && typeof d.sectors === 'object' ? d.sectors : {};
+          state.events = d.events && typeof d.events === 'object' ? d.events : {};
         }
       }
     } catch (e) { console.error('Lecture impossible', e); }
@@ -393,6 +394,25 @@
       state.sectors[id] = { name: state.sectors[id].name, quartiers: [], streets: [], type: '', deleted: true, updated: new Date().toISOString() };
       save();
     },
+    /* Événements de la commune (marché, marche, vide-grenier…), partagés : { id: {title, kind, date, start, end, repeat, until, updated, deleted?} } */
+    events: function () {
+      return Object.keys(state.events).filter(function (id) { return !state.events[id].deleted; })
+        .map(function (id) { var e = state.events[id]; return { id: id, title: e.title, kind: e.kind || 'autre', date: e.date, start: e.start || '', end: e.end || '', repeat: e.repeat || '', until: e.until || '' }; })
+        .sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
+    },
+    saveEvent: function (id, e) {
+      var title = String(e.title || '').replace(/\s+/g, ' ').trim();
+      if (!title || !/^\d{4}-\d{2}-\d{2}$/.test(e.date || '')) return null;
+      if (!id) id = 'e' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+      state.events[id] = { title: title, kind: e.kind || 'autre', date: e.date, start: e.start || '', end: e.end || '', repeat: e.repeat === 'weekly' ? 'weekly' : '', until: e.until || '', updated: new Date().toISOString() };
+      save();
+      return id;
+    },
+    deleteEvent: function (id) {
+      if (!state.events[id]) return;
+      state.events[id] = { title: state.events[id].title, date: state.events[id].date, deleted: true, updated: new Date().toISOString() };
+      save();
+    },
     // Paramètres de l'indemnisation des distributeurs (partagés) : coût = tarif × calendriers distribués + forfait
     getParams: function () {
       var p = state.params || {};
@@ -559,11 +579,11 @@
     // Contenu partagé (sans les réglages propres à l'appareil)
     snapshot: function () {
       return JSON.stringify({ app: 'bfs-tournee', version: T.VERSION, saved: new Date().toISOString(),
-        houses: state.houses, deleted: state.deleted, caisse: state.caisse, stock: state.stock, params: state.params, sectors: state.sectors });
+        houses: state.houses, deleted: state.deleted, caisse: state.caisse, stock: state.stock, params: state.params, sectors: state.sectors, events: state.events });
     },
     exportJSON: function () {
       return JSON.stringify({ app: 'bfs-tournee', version: T.VERSION, exported: new Date().toISOString(),
-        houses: state.houses, deleted: state.deleted, caisse: state.caisse, stock: state.stock, params: state.params, sectors: state.sectors }, null, 2);
+        houses: state.houses, deleted: state.deleted, caisse: state.caisse, stock: state.stock, params: state.params, sectors: state.sectors, events: state.events }, null, 2);
     },
     exportCSV: function () {
       var rows = [['Rue', 'Numéro', 'Logement', 'Statut', 'Note', 'Équipe', 'Latitude', 'Longitude', 'Passages', 'Mis à jour']];
@@ -610,6 +630,11 @@
       Object.keys(dsec).forEach(function (id) {
         var n = dsec[id], c = state.sectors[id];
         if (n && (!c || (n.updated || '') > (c.updated || ''))) { state.sectors[id] = n; cch++; }
+      });
+      var dev = d.events && typeof d.events === 'object' ? d.events : {};
+      Object.keys(dev).forEach(function (id) {
+        var n = dev[id], c = state.events[id];
+        if (n && (!c || (n.updated || '') > (c.updated || ''))) { state.events[id] = n; cch++; }
       });
       var ds = d.stock && typeof d.stock === 'object' ? d.stock : {};
       Object.keys(ds).forEach(function (t) {
@@ -663,7 +688,7 @@
         h.id = T.uid(); h.updated = now; have[addrKey(h)] = 1;
         state.houses.push(h); n++;
       });
-      T.store.merge({ houses: [], deleted: [], caisse: d.caisse, stock: d.stock, params: d.params, sectors: d.sectors }, false);
+      T.store.merge({ houses: [], deleted: [], caisse: d.caisse, stock: d.stock, params: d.params, sectors: d.sectors, events: d.events }, false);
       save();
       return { ok: true, n: n, msg: n + ' adresse(s) restaurée(s)' };
     },

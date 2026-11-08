@@ -92,7 +92,7 @@
     return { list: list, cells: c, ranked: ranked, rem: rem, nVis: list.length, rate: list.length ? Math.round(100 * allP / list.length) : 0, who: who };
   }
 
-  function render() {
+  function renderPres() {
     var box = T.$('#presBox');
     if (!box) return;
     var r = compute(), all = visits();
@@ -162,16 +162,122 @@
     box.innerHTML = html;
   }
 
-  function init() {
-    var box = T.$('#presBox');
-    if (!box) return;
-    box.addEventListener('change', function (e) {
-      if (e.target.id === 'presSec') { sel.sector = e.target.value; render(); }
-      if (e.target.id === 'presZone') { sel.zone = e.target.value; render(); }
-      if (e.target.id === 'presQuart') { sel.quartier = e.target.value; render(); }
-      if (e.target.id === 'presWho') { sel.who = e.target.value; render(); }
-    });
+  /* ---------- événements de la commune ---------- */
+  var KINDS = { marche: 'Marché', rando: 'Marche / randonnée', vide: 'Vide-grenier', sport: 'Match / sport', fete: 'Fête / cérémonie', autre: 'Autre' };
+  var evEdit = null;       // id de l'événement en modification ('' = nouveau, null = formulaire fermé)
+
+  function ymd(d) { return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); }
+  function hm(d) { return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2); }
+  function dayLabel(ds) { var d = new Date(ds + 'T12:00:00'); return DAYS_FULL[dowOf(d)] + ' ' + d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' }); }
+
+  // L'événement a-t-il lieu à ce jour (et à cette heure) ?
+  function occursAt(e, date) {
+    var ds = ymd(date);
+    var dayOk = ds === e.date || (e.repeat === 'weekly' && ds > e.date && (!e.until || ds <= e.until) && dowOf(new Date(e.date + 'T12:00:00')) === dowOf(date));
+    if (!dayOk) return false;
+    if (!e.start && !e.end) return true;
+    var t = hm(date);
+    return t >= (e.start || '00:00') && t <= (e.end || '23:59');
   }
 
-  T.stats = { render: render, init: init, _visits: visits, _compute: compute };
+  function renderEvents() {
+    var box = T.$('#evBox');
+    if (!box) return;
+    var list = T.store.events(), today = ymd(new Date());
+    var cur = evEdit ? list.filter(function (x) { return x.id === evEdit; })[0] : null;
+    cur = cur || { title: '', kind: 'marche', date: today, start: '', end: '', repeat: '', until: '' };
+    var html = '<p class="hint" style="margin-top:0">Ajoutez ce qui se passe dans la commune (marché, marche, vide-grenier, match…). L\'appli compare ensuite la présence des gens pendant ces moments et le reste du temps.</p>';
+    if (evEdit === null) {
+      html += '<div class="btn-col"><button type="button" class="btn-main" id="evNew">＋ Ajouter un événement</button></div>';
+    } else {
+      html += '<div class="evform">' +
+        '<label>Nom<input id="evTitle" type="text" value="' + T.esc(cur.title) + '" placeholder="Ex : Marché du samedi" autocomplete="off"></label>' +
+        '<label>Type<select id="evKind">' + Object.keys(KINDS).map(function (k) { return '<option value="' + k + '"' + (cur.kind === k ? ' selected' : '') + '>' + KINDS[k] + '</option>'; }).join('') + '</select></label>' +
+        '<label>Date (ou 1re date)<input id="evDate" type="date" value="' + T.esc(cur.date) + '"></label>' +
+        '<div class="two2"><label>De<input id="evStart" type="time" value="' + T.esc(cur.start) + '"></label><label>À<input id="evEnd" type="time" value="' + T.esc(cur.end) + '"></label></div>' +
+        '<p class="hint" style="margin:0">Sans horaire : toute la journée.</p>' +
+        '<label>Répétition<select id="evRep"><option value="">Une seule fois</option><option value="weekly"' + (cur.repeat === 'weekly' ? ' selected' : '') + '>Chaque semaine (même jour)</option></select></label>' +
+        '<label>Jusqu\'au (facultatif)<input id="evUntil" type="date" value="' + T.esc(cur.until) + '"></label>' +
+        '<div class="acts"><button type="button" class="btn-main" id="evSave">Enregistrer</button><button type="button" class="btn-sec" id="evCancel">Annuler</button>' +
+        (evEdit ? '<button type="button" class="btn-danger" id="evDel">Supprimer</button>' : '') + '</div></div>';
+    }
+    if (list.length) {
+      html += '<table class="evt"><tr><th>Quand</th><th>Événement</th><th></th></tr>' + list.map(function (e) {
+        var when = e.repeat === 'weekly' ? 'Chaque ' + DAYS_FULL[dowOf(new Date(e.date + 'T12:00:00'))] + (e.until ? ' jusqu\'au ' + new Date(e.until + 'T12:00:00').toLocaleDateString('fr-FR') : '') : dayLabel(e.date);
+        var hrs = e.start || e.end ? ' · ' + (e.start || '…') + '–' + (e.end || '…') : '';
+        return '<tr><td>' + T.esc(when) + hrs + '</td><td><b>' + T.esc(e.title) + '</b><small>' + KINDS[e.kind] + '</small></td><td><button type="button" class="btn-sec" data-evedit="' + e.id + '">Modifier</button></td></tr>';
+      }).join('') + '</table>';
+    } else html += '<p class="hint">Aucun événement pour l\'instant.</p>';
+    box.innerHTML = html;
+  }
+
+  function renderImpact() {
+    var box = T.$('#impBox');
+    if (!box) return;
+    var evs = T.store.events();
+    if (!evs.length) { box.innerHTML = '<p class="hint">Ajoutez des événements ci-dessus pour mesurer leur effet sur la présence.</p>'; return; }
+    var all = visits();
+    if (!all.length) { box.innerHTML = '<p class="hint">Pas encore de passage avec date et heure.</p>'; return; }
+    var rows = Object.keys(KINDS).map(function (k) {
+      var ofKind = evs.filter(function (e) { return e.kind === k; });
+      if (!ofKind.length) return null;
+      var during = { n: 0, p: 0 }, outside = { n: 0, p: 0 };
+      all.forEach(function (v) {
+        var hit = ofKind.some(function (e) { return occursAt(e, v.date); });
+        var b = hit ? during : outside; b.n++; if (v.present) b.p++;
+      });
+      return { k: k, d: during, o: outside };
+    }).filter(Boolean);
+    var html = '<table><tr><th>Type</th><th>Pendant</th><th>Hors événement</th><th>Écart</th></tr>' + rows.map(function (r) {
+      var rd = r.d.n ? Math.round(100 * r.d.p / r.d.n) : null, ro = r.o.n ? Math.round(100 * r.o.p / r.o.n) : null;
+      var ok = r.d.n >= MIN_N && r.o.n >= MIN_N, diff = ok ? rd - ro : null;
+      return '<tr><td>' + KINDS[r.k] + '</td><td>' + (rd == null ? '—' : rd + ' %') + '<small>' + r.d.n + ' pass.</small></td><td>' + (ro == null ? '—' : ro + ' %') + '<small>' + r.o.n + ' pass.</small></td><td>' +
+        (ok ? '<b style="color:' + (diff < -5 ? '#b3261e' : diff > 5 ? '#2e9e4f' : '#555') + '">' + (diff > 0 ? '+' : '') + diff + ' pts</b>' : '<span class="low">trop peu de passages</span>') + '</td></tr>';
+    }).join('') + '</table>' +
+      '<p class="hint" style="margin:4px 0 0">Écart = présence pendant l\'événement moins présence le reste du temps (au moins ' + MIN_N + ' passages de chaque côté). Un écart négatif veut dire que les gens sont moins souvent chez eux pendant l\'événement. C\'est une corrélation : d\'autres facteurs (heure, jour, quartier) jouent aussi.</p>';
+    // événements à venir (14 jours)
+    var now = new Date(), upcoming = [];
+    for (var i = 0; i < 14; i++) {
+      var d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + i, 12, 0);
+      evs.forEach(function (e) { if (occursAt(Object.assign({}, e, { start: '', end: '' }), d)) upcoming.push({ d: d, e: e }); });
+    }
+    html += '<h4>À venir (14 jours)</h4>' + (upcoming.length ? '<ul class="upc">' + upcoming.map(function (u) {
+      return '<li>' + dayLabel(ymd(u.d)) + ' — <b>' + T.esc(u.e.title) + '</b>' + (u.e.start || u.e.end ? ' (' + (u.e.start || '…') + '–' + (u.e.end || '…') + ')' : '') + '</li>';
+    }).join('') + '</ul>' : '<p class="hint">Rien de prévu.</p>');
+    box.innerHTML = html;
+  }
+
+  function render() { renderPres(); renderEvents(); renderImpact(); }
+
+  function init() {
+    var body = T.$('#statsBody');
+    if (!body) return;
+    body.innerHTML =
+      '<div class="card"><h3>Présence : jours et horaires</h3><div id="presBox"></div></div>' +
+      '<div class="card"><h3>Événements de la commune</h3><div id="evBox"></div></div>' +
+      '<div class="card"><h3>Effet des événements sur la présence</h3><div id="impBox"></div></div>';
+    var box = T.$('#presBox');
+    box.addEventListener('change', function (e) {
+      if (e.target.id === 'presSec') { sel.sector = e.target.value; renderPres(); }
+      if (e.target.id === 'presZone') { sel.zone = e.target.value; renderPres(); }
+      if (e.target.id === 'presQuart') { sel.quartier = e.target.value; renderPres(); }
+      if (e.target.id === 'presWho') { sel.who = e.target.value; renderPres(); }
+    });
+    T.$('#evBox').addEventListener('click', function (e) {
+      var id = e.target.id, ed = e.target.getAttribute('data-evedit');
+      if (ed) { evEdit = ed; renderEvents(); }
+      else if (id === 'evNew') { evEdit = ''; renderEvents(); }
+      else if (id === 'evCancel') { evEdit = null; renderEvents(); }
+      else if (id === 'evSave') {
+        var r = T.store.saveEvent(evEdit, { title: T.$('#evTitle').value, kind: T.$('#evKind').value, date: T.$('#evDate').value, start: T.$('#evStart').value, end: T.$('#evEnd').value, repeat: T.$('#evRep').value, until: T.$('#evUntil').value });
+        if (!r) { T.toast('Indiquez un nom et une date'); return; }
+        evEdit = null; T.toast('Événement enregistré'); renderEvents(); renderImpact();
+      } else if (id === 'evDel') {
+        if (confirm('Supprimer cet événement ?')) { T.store.deleteEvent(evEdit); evEdit = null; renderEvents(); renderImpact(); }
+      }
+    });
+    T.bus.on('change', function () { if (T.$('#view-stats').classList.contains('active') && evEdit === null) render(); });
+  }
+
+  T.stats = { render: render, init: init, occursAt: occursAt, _visits: visits, _compute: compute };
 })();
