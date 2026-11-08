@@ -244,6 +244,7 @@
       '<div class="card"><h3>Avancement</h3><div class="bar" id="barBox"></div><small id="barTxt" class="hint"></small></div>' +
       '<div class="card"><h3>Par équipe</h3><div id="teamBox"></div></div>' +
       '<div class="card"><h3>Par secteur</h3><div id="sectorBox2"></div></div>' +
+      '<div class="card"><h3>Présence : jours et horaires</h3><div id="presBox"></div></div>' +
       '<div class="card"><h3>Passages (nombre de visites)</h3><div id="visitBox"></div></div>' +
       '<div class="card"><h3>Compte</h3>' +
         '<p id="accountTxt" style="margin:0 0 8px"></p>' +
@@ -361,6 +362,7 @@
           return '<tr><td>' + T.esc(k) + ' <small>(' + (x.total - x.todo) + '/' + x.total + ')</small></td><td>' + x.passe + '</td><td>' + x.repasser + '</td><td>' + x.refus + '</td><td>' + x.inhabite + '</td><td>' + x.todo + '</td></tr>';
         }).join('') + '</table>'
       : '<p class="hint">Aucun secteur créé : Liste → Secteurs.</p>';
+    if (T.stats) T.stats.render();
     T.$('#accountTxt').textContent = T.sync.user() ? 'Connecté : ' + T.sync.user() : 'Non connecté';
   }
 
@@ -373,6 +375,7 @@
     });
     buildStatusBtns();
     buildBilan();
+    if (T.stats) T.stats.init();
     bindLogin();
     // La case « chien » s'enregistre tout de suite pour une habitation existante
     T.$('#fFF').addEventListener('change', function () {

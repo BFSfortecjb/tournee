@@ -352,7 +352,7 @@
     /* Secteurs : groupes de quartiers et de rues (partagés). { id: {name, quartiers[], streets[], updated, deleted?} } */
     sectors: function () {
       return Object.keys(state.sectors).filter(function (id) { return !state.sectors[id].deleted; })
-        .map(function (id) { var s = state.sectors[id]; return { id: id, name: s.name, quartiers: s.quartiers || [], streets: s.streets || [] }; })
+        .map(function (id) { var s = state.sectors[id]; return { id: id, name: s.name, quartiers: s.quartiers || [], streets: s.streets || [], type: s.type || '' }; })
         .sort(function (a, b) { return a.name.localeCompare(b.name, 'fr'); });
     },
     // Secteur d'une rue : l'affectation de la rue prime sur celle de son quartier
@@ -365,7 +365,14 @@
       }
       return byQ;
     },
-    saveSector: function (id, name, quartiers, streets) {
+    // Type du secteur de la rue : 'ville', 'campagne' ou '' (non précisé / hors secteur)
+    zoneOf: function (street) {
+      var n = T.store.sectorOf(street);
+      if (!n) return '';
+      var l = T.store.sectors().filter(function (s) { return s.name === n; })[0];
+      return (l && l.type) || '';
+    },
+    saveSector: function (id, name, quartiers, streets, type) {
       name = String(name || '').replace(/\s+/g, ' ').trim();
       if (!name) return null;
       if (!id) id = 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
@@ -375,15 +382,15 @@
         var s = state.sectors[o]; if (o === id || s.deleted) return;
         var nq = (s.quartiers || []).filter(function (x) { return quartiers.indexOf(x) < 0; });
         var ns = (s.streets || []).filter(function (x) { return !streets.some(function (y) { return skey(y) === skey(x); }); });
-        if (nq.length !== (s.quartiers || []).length || ns.length !== (s.streets || []).length) state.sectors[o] = { name: s.name, quartiers: nq, streets: ns, updated: now };
+        if (nq.length !== (s.quartiers || []).length || ns.length !== (s.streets || []).length) state.sectors[o] = { name: s.name, quartiers: nq, streets: ns, type: s.type || '', updated: now };
       });
-      state.sectors[id] = { name: name, quartiers: quartiers.slice(), streets: streets.slice(), updated: now };
+      state.sectors[id] = { name: name, quartiers: quartiers.slice(), streets: streets.slice(), type: type === 'ville' || type === 'campagne' ? type : '', updated: now };
       save();
       return id;
     },
     deleteSector: function (id) {
       if (!state.sectors[id]) return;
-      state.sectors[id] = { name: state.sectors[id].name, quartiers: [], streets: [], deleted: true, updated: new Date().toISOString() };
+      state.sectors[id] = { name: state.sectors[id].name, quartiers: [], streets: [], type: '', deleted: true, updated: new Date().toISOString() };
       save();
     },
     // Paramètres de l'indemnisation des distributeurs (partagés) : coût = tarif × calendriers distribués + forfait
