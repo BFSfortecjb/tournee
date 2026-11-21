@@ -15,7 +15,7 @@
     var s = T.store.stats();
     var items = [['all', 'Tout (' + s.total + ')']].concat(T.STATUS_ORDER.map(function (k) {
       return [k, T.STATUS[k].label + ' (' + s[k] + ')'];
-    }));
+    }), [['nodon', '💶 Passé sans montant (' + T.store.all().filter(T.store.sansDon).length + ')']]);
     T.$('#filters').innerHTML = items.map(function (it) {
       return '<button class="chip' + (filter === it[0] ? ' on' : '') + '" data-f="' + it[0] + '">' + T.esc(it[1]) + '</button>';
     }).join('');

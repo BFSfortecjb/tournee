@@ -258,9 +258,11 @@
       state.houses.forEach(function (h) { if (h.street) seen[h.street] = 1; });
       return Object.keys(seen).sort(function (a, b) { return a.localeCompare(b, 'fr'); });
     },
+    // Calendrier remis (statut Passé) mais aucun montant saisi (ni don, ni « gratuit »)
+    sansDon: function (h) { return h.status === 'passe' && h.pay !== 'gratuit' && !(Number(h.amount) > 0); },
     sorted: function (filter) {
       return state.houses
-        .filter(function (h) { return !filter || filter === 'all' || h.status === filter; })
+        .filter(function (h) { return !filter || filter === 'all' || (filter === 'nodon' ? T.store.sansDon(h) : h.status === filter); })
         .sort(function (a, b) {
           var s = (a.street || '~').localeCompare(b.street || '~', 'fr');
           return s || numKey(a.number) - numKey(b.number) ||
