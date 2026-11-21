@@ -103,7 +103,7 @@
         var d = Math.round((r.compte.esp + r.compte.chq - r.saisi.total) * 100) / 100;
         ecart = Math.abs(d) < 0.005 ? '<span class="ok">OK</span>' : '<span class="ko">' + (d > 0 ? '+' : '') + fmt(d) + '</span>';
       }
-      return '<tr><td>' + dayFr(r.day) + '</td><td>' + (r.who === T.GLOBAL ? '<b>Comptage global</b>' : T.esc(r.who)) + '</td><td class="n">' + r.saisi.cal + (r.saisi.kept ? ' (+' + r.saisi.kept + ' gardés)' : '') + '</td><td class="n">' + fmt(r.saisi.esp) + '</td><td class="n">' + fmt(r.saisi.chq) + '</td>' +
+      return '<tr><td>' + dayFr(r.day) + (r.countedAt ? '<br><small>compté le ' + new Date(r.countedAt).toLocaleDateString('fr-FR') + '</small>' : '') + '</td><td>' + (r.who === T.GLOBAL ? '<b>Comptage global</b>' : T.esc(r.who)) + '</td><td class="n">' + r.saisi.cal + (r.saisi.kept ? ' (+' + r.saisi.kept + ' gardés)' : '') + '</td><td class="n">' + fmt(r.saisi.esp) + '</td><td class="n">' + fmt(r.saisi.chq) + '</td>' +
         '<td class="n"><b>' + fmt(r.saisi.total) + '</b></td><td class="n">' + cEsp + '</td><td class="n">' + cChq + '</td><td class="n">' + ecart + '</td></tr>';
     }).join('') || '<tr><td colspan="9">Aucun don saisi.</td></tr>';
 

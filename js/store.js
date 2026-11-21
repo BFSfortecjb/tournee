@@ -560,6 +560,7 @@
         return { who: p[0], day: p[1], saisi: s, caisse: c, compte: c ? { esp: c.tEsp, chq: c.tChq } : null, n: c ? c.n : 0 };
       });
       var hasGlobal = rows.some(function (r) { return r.who === T.GLOBAL && r.compte; });
+      rows.forEach(function (r) { if (r.who === T.GLOBAL) { var cs = T.store.countings(T.GLOBAL, 'global'); r.countedAt = cs.length ? cs[0].at : ''; } });
       rows.forEach(function (r) { r.inGlobal = hasGlobal && !r.compte && r.who !== T.GLOBAL; });
       // Détail des coupures comptées (tous comptages confondus), utile pour la remise en banque
       var esp = {}, chq = {}, other = 0;
