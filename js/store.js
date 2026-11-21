@@ -475,7 +475,7 @@
       Object.keys(state.caisse).forEach(function (k) {
         var c = state.caisse[k], p = k.split('|');
         if (p.length < 2 || c.deleted) return;
-        if (!any && ((team != null && p[0] !== team) || (day != null && p[1] !== day))) return;
+        if (!any && ((team != null && p[0] !== team) || (day != null && day !== 'global' && p[1] !== day))) return;
         var t = T.store.caisseTotals(c);
         out.push({ key: k, who: p[0], day: p[1], esp: c.esp || {}, chq: c.chq || {}, tEsp: t.esp, tChq: t.chq, chqOther: Number(c.chqOther) || 0, at: c.created || c.updated || '' });
       });
@@ -521,7 +521,7 @@
     financeDay: function (team, day) {
       var esp = 0, chq = 0, n = 0, gratuit = 0, cal = 0, kept = 0;
       state.houses.forEach(function (h) {
-        if (!h.pay || (team !== T.GLOBAL && (h.paid_by || h.team || '(sans équipe)') !== team) || (team !== T.GLOBAL && h.paid_on !== day)) return;
+        if (!h.pay || (team !== T.GLOBAL && (h.paid_by || h.team || '(sans équipe)') !== team) || (team !== T.GLOBAL && day !== 'global' && h.paid_on !== day)) return;
         n++;
         if (h.pay === 'gratuit') { gratuit++; if (h.motif === 'garde') kept += calOf(h); else cal += calOf(h); return; }
         cal += calOf(h);
@@ -533,7 +533,7 @@
     chequesDay: function (team, day) {
       var out = {};
       state.houses.forEach(function (h) {
-        if (h.pay !== 'chq' || !h.paid_on || (team !== T.GLOBAL && ((h.paid_by || h.team || '(sans équipe)') !== team || h.paid_on !== day))) return;
+        if (h.pay !== 'chq' || !h.paid_on || (team !== T.GLOBAL && ((h.paid_by || h.team || '(sans équipe)') !== team || (day !== 'global' && h.paid_on !== day)))) return;
         var k = String(Number(h.amount) || 0).replace('.', '_');
         out[k] = (out[k] || 0) + 1;
       });
@@ -560,8 +560,10 @@
         return { who: p[0], day: p[1], saisi: s, caisse: c, compte: c ? { esp: c.tEsp, chq: c.tChq } : null, n: c ? c.n : 0 };
       });
       var hasGlobal = rows.some(function (r) { return r.who === T.GLOBAL && r.compte; });
-      rows.forEach(function (r) { if (r.who === T.GLOBAL) { var cs = T.store.countings(T.GLOBAL, 'global'); r.countedAt = cs.length ? cs[0].at : ''; } });
-      rows.forEach(function (r) { r.inGlobal = hasGlobal && !r.compte && r.who !== T.GLOBAL; });
+      rows.forEach(function (r) { if (r.day === 'global') { var cs = T.store.countings(r.who, 'global'); r.countedAt = cs.length ? cs[0].at : ''; } });
+      var globWho = {};
+      T.store.countings().forEach(function (c) { if (c.day === 'global') globWho[c.who] = 1; });
+      rows.forEach(function (r) { r.inGlobal = r.day !== 'global' && !r.compte && (hasGlobal || !!globWho[r.who]); });
       // Détail des coupures comptées (tous comptages confondus), utile pour la remise en banque
       var esp = {}, chq = {}, other = 0;
       T.store.countings().forEach(function (c) {

@@ -190,21 +190,20 @@
 
   function buildCaisse() {
     var sel = T.$('#caisseTeam');
-    var teams = teamList();
     var days = T.store.caisseDays().filter(function (d) { return d !== 'global'; });
-    if (!caisseTeam || teams.indexOf(caisseTeam) < 0) caisseTeam = teams.indexOf(T.store.team()) >= 0 ? T.store.team() : teams[1] || T.GLOBAL;
+    var teams = teamList();
+    if (!caisseTeam || teams.indexOf(caisseTeam) < 0) caisseTeam = T.GLOBAL;
     var glob = caisseTeam === T.GLOBAL;
-    if (glob) caisseDay = 'global';
-    else if (!caisseDay || days.indexOf(caisseDay) < 0) caisseDay = days[0];
-    T.$('#caisseDay').innerHTML = (glob ? ['global'] : days).map(function (d) {
+    caisseDay = 'global';
+    T.$('#caisseDay').innerHTML = (['global']).map(function (d) {
       return '<option value="' + d + '"' + (d === caisseDay ? ' selected' : '') + '>' + dayLabel(d) + '</option>';
     }).join('');
     T.$('#caisseDay').disabled = glob;
-    sel.innerHTML = teams.map(function (t) { return '<option value="' + T.esc(t) + '"' + (t === caisseTeam ? ' selected' : '') + '>' + (t === T.GLOBAL ? 'Tous (comptage global)' : T.esc(t)) + '</option>'; }).join('');
+    sel.innerHTML = teams.map(function (t) { return '<option value="' + T.esc(t) + '"' + (t === caisseTeam ? ' selected' : '') + '>' + (t === T.GLOBAL ? 'Tous (comptage global)' : T.esc(t) + ' (tous les jours)') + '</option>'; }).join('');
     // Le formulaire repart toujours à zéro : chaque enregistrement est un comptage de plus (voir l'historique)
-    var prev = T.store.getCaisse(caisseTeam, caisseDay, glob);
+    var prev = T.store.getCaisse(caisseTeam, 'global', glob);
     T.$('#caisseBox').innerHTML = table('Espèces', ESP, 'esp', null) + chequeTable(prev) + '<div id="caisseRes"></div>';
-    T.$('#caisseMsg').textContent = prev ? prev.n + ' comptage(s) déjà enregistré(s)' + (glob ? ' (toutes personnes et tous jours) : ' : ' pour ce jour : ') + fmt(prev.tEsp + prev.tChq) + '.' : 'Aucun comptage enregistré' + (glob ? '.' : ' pour ce jour.');
+    T.$('#caisseMsg').textContent = prev ? prev.n + ' comptage(s) déjà enregistré(s)' + (glob ? ' (toutes personnes et tous jours) : ' : ' pour cette personne, tous jours : ') + fmt(prev.tEsp + prev.tChq) + '.' : 'Aucun comptage enregistré.';
     computeCaisse();
     renderCountHist();
   }
@@ -233,7 +232,7 @@
       if (cell) cell.textContent = q ? fmt(d * q) : '';
     });
     Object.keys(c.chq).forEach(function (k) { counted.chq += Math.round(parseFloat(k.replace('_', '.')) * 100) * c.chq[k]; });
-    var prev = T.store.getCaisse(caisseTeam, caisseDay, caisseTeam === T.GLOBAL);
+    var prev = T.store.getCaisse(caisseTeam, 'global', caisseTeam === T.GLOBAL);
     if (prev) { counted.esp += Math.round(prev.tEsp * 100); counted.chq += Math.round(prev.tChq * 100); }
     var todo = 0, diffq = 0;
     T.$$('#caisseBox .cqk').forEach(function (cb) {
@@ -246,7 +245,7 @@
       return '<tr><td>' + label + '</td><td>' + fmt(cnt / 100) + '</td><td>' + fmt(exp) + '</td>' +
         '<td class="' + (Math.abs(diff) < 0.005 ? 'ok' : 'ko') + '">' + (Math.abs(diff) < 0.005 ? 'OK' : (diff > 0 ? '+' : '') + fmt(diff)) + '</td></tr>';
     }
-    T.$('#caisseRes').innerHTML = '<table><tr><th></th><th>Compté' + (prev ? (caisseTeam === T.GLOBAL ? ' (cumul)' : ' (cumul du jour)') : '') + '</th><th>Saisi</th><th>Écart</th></tr>' +
+    T.$('#caisseRes').innerHTML = '<table><tr><th></th><th>Compté' + (prev ? ' (cumul)' : '') + '</th><th>Saisi</th><th>Écart</th></tr>' +
       line('Espèces', counted.esp, t.esp) + line('Chèques', counted.chq, t.chq) +
       line('Total', counted.esp + counted.chq, t.esp + t.chq) + '</table>' +
       (todo ? '<p class="hint" style="color:#d6402f">' + todo + ' montant(s) de chèques pas encore confirmé(s).</p>' : '') +
@@ -277,8 +276,8 @@
       '</section>' +
       '<section class="fpan hidden" data-p="ponctuel">' +
       '<div class="card"><h3>Caisse</h3>' +
-        '<div class="row"><label class="grow">Personne<select id="caisseTeam"></select></label>' +
-        '<label class="grow">Jour<select id="caisseDay"></select></label></div>' +
+        '<p class="hint" style="margin-top:0">Comptage global : toutes les personnes, tous les jours.</p>' +
+        '<label>Personne<select id="caisseTeam"></select></label><div class="hidden"><select id="caisseDay"></select></div>' +
         '<div id="caisseBox"></div>' +
         '<button id="btnCaisseSave" class="btn-main" type="button">Enregistrer le comptage</button>' +
         '<p id="caisseMsg" class="hint"></p></div>' +
