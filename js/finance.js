@@ -60,7 +60,8 @@
   /* ---------- stock de calendriers ---------- */
   var stockTeam = '';
   function renderStock() {
-    var teams = teamList();
+    var teams = teamList().filter(function (t) { return t !== T.GLOBAL; });
+    if (!teams.length) teams = ['(sans équipe)'];
     if (!stockTeam || teams.indexOf(stockTeam) < 0) stockTeam = teams.indexOf(T.store.team()) >= 0 ? T.store.team() : teams[0];
     var sel = T.$('#stockTeam');
     // on ne reconstruit pas les champs pendant la saisie
@@ -124,12 +125,14 @@
     Object.keys(f.team).forEach(function (t) { seen[t] = 1; });
     T.store.teamsWithCaisse().forEach(function (t) { seen[t] = 1; });
     if (T.store.team()) seen[T.store.team()] = 1;
+    delete seen[T.GLOBAL];
     var l = Object.keys(seen).sort(function (a, b) { return a.localeCompare(b, 'fr'); });
-    return l.length ? l : ['(sans équipe)'];
+    return [T.GLOBAL].concat(l);
   }
 
   function dayLabel(d) {
     var p = d.split('-');
+    if (d === 'global') return 'Tous les jours';
     return p.length === 3 ? p[2] + '/' + p[1] + '/' + p[0] + (d === T.store.today() ? ' (aujourd\'hui)' : '') : d;
   }
   function key(v) { return String(v).replace('.', '_'); }
@@ -188,17 +191,20 @@
   function buildCaisse() {
     var sel = T.$('#caisseTeam');
     var teams = teamList();
-    var days = T.store.caisseDays();
-    if (!caisseDay || days.indexOf(caisseDay) < 0) caisseDay = days[0];
-    T.$('#caisseDay').innerHTML = days.map(function (d) {
+    var days = T.store.caisseDays().filter(function (d) { return d !== 'global'; });
+    if (!caisseTeam || teams.indexOf(caisseTeam) < 0) caisseTeam = teams.indexOf(T.store.team()) >= 0 ? T.store.team() : teams[1] || T.GLOBAL;
+    var glob = caisseTeam === T.GLOBAL;
+    if (glob) caisseDay = 'global';
+    else if (!caisseDay || days.indexOf(caisseDay) < 0) caisseDay = days[0];
+    T.$('#caisseDay').innerHTML = (glob ? ['global'] : days).map(function (d) {
       return '<option value="' + d + '"' + (d === caisseDay ? ' selected' : '') + '>' + dayLabel(d) + '</option>';
     }).join('');
-    if (!caisseTeam || teams.indexOf(caisseTeam) < 0) caisseTeam = teams.indexOf(T.store.team()) >= 0 ? T.store.team() : teams[0];
-    sel.innerHTML = teams.map(function (t) { return '<option' + (t === caisseTeam ? ' selected' : '') + '>' + T.esc(t) + '</option>'; }).join('');
+    T.$('#caisseDay').disabled = glob;
+    sel.innerHTML = teams.map(function (t) { return '<option value="' + T.esc(t) + '"' + (t === caisseTeam ? ' selected' : '') + '>' + (t === T.GLOBAL ? 'Tous (comptage global)' : T.esc(t)) + '</option>'; }).join('');
     // Le formulaire repart toujours à zéro : chaque enregistrement est un comptage de plus (voir l'historique)
-    var prev = T.store.getCaisse(caisseTeam, caisseDay);
+    var prev = T.store.getCaisse(caisseTeam, caisseDay, glob);
     T.$('#caisseBox').innerHTML = table('Espèces', ESP, 'esp', null) + chequeTable(prev) + '<div id="caisseRes"></div>';
-    T.$('#caisseMsg').textContent = prev ? prev.n + ' comptage(s) déjà enregistré(s) pour ce jour : ' + fmt(prev.tEsp + prev.tChq) + '.' : 'Aucun comptage enregistré pour ce jour.';
+    T.$('#caisseMsg').textContent = prev ? prev.n + ' comptage(s) déjà enregistré(s)' + (glob ? ' (toutes personnes et tous jours) : ' : ' pour ce jour : ') + fmt(prev.tEsp + prev.tChq) + '.' : 'Aucun comptage enregistré' + (glob ? '.' : ' pour ce jour.');
     computeCaisse();
     renderCountHist();
   }
@@ -227,7 +233,7 @@
       if (cell) cell.textContent = q ? fmt(d * q) : '';
     });
     Object.keys(c.chq).forEach(function (k) { counted.chq += Math.round(parseFloat(k.replace('_', '.')) * 100) * c.chq[k]; });
-    var prev = T.store.getCaisse(caisseTeam, caisseDay);
+    var prev = T.store.getCaisse(caisseTeam, caisseDay, caisseTeam === T.GLOBAL);
     if (prev) { counted.esp += Math.round(prev.tEsp * 100); counted.chq += Math.round(prev.tChq * 100); }
     var todo = 0, diffq = 0;
     T.$$('#caisseBox .cqk').forEach(function (cb) {
@@ -240,7 +246,7 @@
       return '<tr><td>' + label + '</td><td>' + fmt(cnt / 100) + '</td><td>' + fmt(exp) + '</td>' +
         '<td class="' + (Math.abs(diff) < 0.005 ? 'ok' : 'ko') + '">' + (Math.abs(diff) < 0.005 ? 'OK' : (diff > 0 ? '+' : '') + fmt(diff)) + '</td></tr>';
     }
-    T.$('#caisseRes').innerHTML = '<table><tr><th></th><th>Compté' + (prev ? ' (cumul du jour)' : '') + '</th><th>Saisi</th><th>Écart</th></tr>' +
+    T.$('#caisseRes').innerHTML = '<table><tr><th></th><th>Compté' + (prev ? (caisseTeam === T.GLOBAL ? ' (cumul)' : ' (cumul du jour)') : '') + '</th><th>Saisi</th><th>Écart</th></tr>' +
       line('Espèces', counted.esp, t.esp) + line('Chèques', counted.chq, t.chq) +
       line('Total', counted.esp + counted.chq, t.esp + t.chq) + '</table>' +
       (todo ? '<p class="hint" style="color:#d6402f">' + todo + ' montant(s) de chèques pas encore confirmé(s).</p>' : '') +

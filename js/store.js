@@ -470,20 +470,20 @@
     today: today,
     // Plusieurs comptages possibles par personne et par jour (clé « identifiant|jour|n° ») ; les anciens (2 parties) restent lus.
     // Un comptage supprimé reste en place, marqué « deleted », pour que la suppression se propage aux autres appareils.
-    countings: function (team, day) {
+    countings: function (team, day, any) {
       var out = [];
       Object.keys(state.caisse).forEach(function (k) {
         var c = state.caisse[k], p = k.split('|');
         if (p.length < 2 || c.deleted) return;
-        if ((team != null && p[0] !== team) || (day != null && p[1] !== day)) return;
+        if (!any && ((team != null && p[0] !== team) || (day != null && p[1] !== day))) return;
         var t = T.store.caisseTotals(c);
         out.push({ key: k, who: p[0], day: p[1], esp: c.esp || {}, chq: c.chq || {}, tEsp: t.esp, tChq: t.chq, chqOther: Number(c.chqOther) || 0, at: c.created || c.updated || '' });
       });
       return out.sort(function (a, b) { return a.at < b.at ? 1 : a.at > b.at ? -1 : 0; });
     },
     // Cumul des comptages d'une personne pour un jour : quantités par valeur + totaux en euros ; null s'il n'y en a pas
-    getCaisse: function (team, day) {
-      var l = T.store.countings(team, day);
+    getCaisse: function (team, day, any) {
+      var l = T.store.countings(team, day, any);
       if (!l.length) return null;
       var r = { esp: {}, chq: {}, tEsp: 0, tChq: 0, n: l.length };
       l.forEach(function (c) {
@@ -521,7 +521,7 @@
     financeDay: function (team, day) {
       var esp = 0, chq = 0, n = 0, gratuit = 0, cal = 0, kept = 0;
       state.houses.forEach(function (h) {
-        if (!h.pay || (h.paid_by || h.team || '(sans équipe)') !== team || h.paid_on !== day) return;
+        if (!h.pay || (team !== T.GLOBAL && (h.paid_by || h.team || '(sans équipe)') !== team) || (team !== T.GLOBAL && h.paid_on !== day)) return;
         n++;
         if (h.pay === 'gratuit') { gratuit++; if (h.motif === 'garde') kept += calOf(h); else cal += calOf(h); return; }
         cal += calOf(h);
@@ -533,7 +533,7 @@
     chequesDay: function (team, day) {
       var out = {};
       state.houses.forEach(function (h) {
-        if (h.pay !== 'chq' || (h.paid_by || h.team || '(sans équipe)') !== team || h.paid_on !== day) return;
+        if (h.pay !== 'chq' || !h.paid_on || (team !== T.GLOBAL && ((h.paid_by || h.team || '(sans équipe)') !== team || h.paid_on !== day))) return;
         var k = String(Number(h.amount) || 0).replace('.', '_');
         out[k] = (out[k] || 0) + 1;
       });
@@ -559,6 +559,8 @@
         var p = k.split('|'), s = T.store.financeDay(p[0], p[1]), c = T.store.getCaisse(p[0], p[1]);
         return { who: p[0], day: p[1], saisi: s, caisse: c, compte: c ? { esp: c.tEsp, chq: c.tChq } : null, n: c ? c.n : 0 };
       });
+      var hasGlobal = rows.some(function (r) { return r.who === T.GLOBAL && r.compte; });
+      rows.forEach(function (r) { r.inGlobal = hasGlobal && !r.compte && r.who !== T.GLOBAL; });
       // Détail des coupures comptées (tous comptages confondus), utile pour la remise en banque
       var esp = {}, chq = {}, other = 0;
       T.store.countings().forEach(function (c) {
