@@ -172,17 +172,20 @@
       var h = T.store.get(id);
       if (!h) return null;
       // Un don modifié est daté et attribué à l'équipe qui le saisit
-      var donChanged = (patch.amount !== undefined && patch.amount !== h.amount) ||
-                       (patch.pay !== undefined && patch.pay !== h.pay);
+      // Comparaison normalisée (3 = « 3 » ; vide = absent) : rouvrir une fiche et valider sans rien changer ne touche pas au don
+      var donChanged = (patch.amount !== undefined && (Number(patch.amount) || 0) !== (Number(h.amount) || 0)) ||
+                       (patch.pay !== undefined && (patch.pay || '') !== (h.pay || ''));
+      var hadDon = !!h.pay && !!h.paid_by;   // don déjà saisi par quelqu'un : on garde qui l'a encaissé et quand
+      var statusChanged = patch.status !== undefined && patch.status !== h.status;
       Object.keys(patch).forEach(function (k) { h[k] = patch[k]; });
       if (h.pay !== 'gratuit') h.motif = '';
       if (h.pay !== 'esp' && h.pay !== 'chq') h.souche = '';
       if (opts && opts.visit) addVisit(h, h.status);
       if (donChanged) {
-        if (h.pay) { h.paid_on = today(); h.paid_by = state.settings.team || h.paid_by || ''; }
+        if (h.pay) { if (!hadDon) { h.paid_on = today(); h.paid_by = state.settings.team || h.paid_by || ''; } }
         else { h.paid_on = ''; h.paid_by = ''; h.amount = null; h.cal = 0; }
       }
-      if (patch.status !== undefined || patch.note !== undefined || donChanged) {
+      if (statusChanged || (donChanged && !hadDon) || !h.team) {
         h.team = state.settings.team || h.team || '';
       }
       h.updated = new Date().toISOString();
@@ -449,24 +452,28 @@
     // Comptage de caisse d'une équipe : { esp: {valeur: quantité}, chq: {...}, chqOther: euros, updated }
     // Stock de calendriers d'une personne : reçus au départ, rendus (non distribués) à la fin
     getStock: function (team) { return state.stock[team] || null; },
-    setStock: function (team, recu, rendu) {
-      state.stock[team] = { recu: Math.max(0, parseInt(recu, 10) || 0), rendu: Math.max(0, parseInt(rendu, 10) || 0), updated: new Date().toISOString() };
+    setStock: function (team, recu, rendu, hors) {
+      state.stock[team] = { recu: Math.max(0, parseInt(recu, 10) || 0), rendu: Math.max(0, parseInt(rendu, 10) || 0), hors: Math.max(0, parseInt(hors, 10) || 0), updated: new Date().toISOString() };
       save();
     },
     // Bilan des calendriers par personne : reçus, vendus (contre un don), donnés, distribués, rendus, reste théorique
     calendriers: function () {
-      var f = T.store.finance(), seen = {}, rows = [];
+      var f = T.store.finance(), seen = {}, rows = [], horsTot = 0;
       Object.keys(f.team).forEach(function (t) { seen[t] = 1; });
       Object.keys(state.stock).forEach(function (t) { seen[t] = 1; });
       Object.keys(seen).sort(function (a, b) { return a.localeCompare(b, 'fr'); }).forEach(function (t) {
         var d = f.team[t] || { sold: 0, gift: 0, cs: 0, kept: 0, cal: 0 }, s = state.stock[t] || null;
-        rows.push({ who: t, recu: s ? s.recu : null, rendu: s ? s.rendu : null, sold: d.sold, gift: d.gift, cs: d.cs, kept: d.kept, dist: d.cal,
-          reste: s ? s.recu - d.cal - d.kept : null, ecart: s ? s.recu - d.cal - d.kept - s.rendu : null });
+        var hors = s ? (s.hors || 0) : 0;   // donnés à un centre de secours, sans fiche d'habitation
+        horsTot += hors;
+        rows.push({ who: t, recu: s ? s.recu : null, rendu: s ? s.rendu : null, sold: d.sold, gift: d.gift, cs: d.cs + hors, hors: hors, kept: d.kept, dist: d.cal + hors,
+          reste: s ? s.recu - d.cal - hors - d.kept : null, ecart: s ? s.recu - d.cal - hors - d.kept - s.rendu : null });
       });
       // Calendriers gratuits par motif (tous confondus)
       var motifs = {};
       state.houses.forEach(function (h) { if (h.pay === 'gratuit') { var m = h.motif || '(motif non précisé)'; motifs[m] = (motifs[m] || 0) + calOf(h); } });
-      return { rows: rows, all: f.all, motifs: motifs };
+      var all = Object.assign({}, f.all); all.cs = (all.cs || 0) + horsTot;
+      if (horsTot) motifs['Donnés à un centre de secours (sans fiche)'] = horsTot;
+      return { rows: rows, all: all, motifs: motifs };
     },
     // Un comptage par personne et par jour : clé « identifiant|AAAA-MM-JJ »
     today: today,
