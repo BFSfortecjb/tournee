@@ -282,7 +282,8 @@
         '<div id="caisseBox"></div>' +
         '<button id="btnCaisseSave" class="btn-main" type="button">Enregistrer le comptage</button>' +
         '<p id="caisseMsg" class="hint"></p></div>' +
-      '<div class="card"><h3>Historique des comptages</h3><div id="countHist" style="overflow-x:auto"></div></div>' +
+      '<div class="card"><h3>Historique des comptages</h3><div id="countHist" style="overflow-x:auto"></div>' +
+        '<button id="btnCountReset" class="btn-danger" type="button" style="margin-top:10px;width:100%">Réinitialiser : supprimer tous les comptages et confirmations de chèques</button></div>' +
       '<div class="card"><h3>Calendriers : stock et restitution</h3>' +
         '<form id="stockForm"><label>Personne<select id="stockTeam"></select></label>' +
         '<div class="row"><label class="grow">Calendriers reçus au départ<input id="stRecu" type="number" min="0" inputmode="numeric"></label>' +
@@ -331,6 +332,14 @@
       }
       if (!confirm('Supprimer ce comptage ? Les totaux de la caisse seront recalculés.')) return;
       T.store.delCaisse(b.getAttribute('data-delcount'));
+      buildCaisse();
+    });
+    T.$('#btnCountReset').addEventListener('click', function () {
+      var l = T.store.countings(null, null, true);
+      if (!l.length) { T.toast('Aucun comptage à supprimer'); return; }
+      if (!confirm('Supprimer les ' + l.length + ' comptage(s) enregistré(s) ? Les confirmations de chèques sont remises à zéro. Les dons saisis ne sont pas touchés. Action définitive.')) return;
+      l.forEach(function (c) { T.store.delCaisse(c.key); });
+      T.toast(l.length + ' comptage(s) supprimé(s)');
       buildCaisse();
     });
     T.$('#caisseBox').addEventListener('input', computeCaisse);
