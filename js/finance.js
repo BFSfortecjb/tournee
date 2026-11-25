@@ -70,7 +70,6 @@
     var s = T.store.getStock(stockTeam);
     T.$('#stRecu').value = s ? s.recu : '';
     T.$('#stRendu').value = s ? s.rendu : '';
-    T.$('#stHors').value = s && s.hors ? s.hors : '';
     renderStockTable();
   }
   function renderStockTable() {
@@ -288,7 +287,6 @@
         '<form id="stockForm"><label>Personne<select id="stockTeam"></select></label>' +
         '<div class="row"><label class="grow">Calendriers reçus au départ<input id="stRecu" type="number" min="0" inputmode="numeric"></label>' +
         '<label class="grow">Calendriers rendus (non distribués)<input id="stRendu" type="number" min="0" inputmode="numeric"></label></div>' +
-        '<label>Donnés à un centre de secours (sans fiche d\'adresse)<input id="stHors" type="number" min="0" inputmode="numeric" placeholder="Ex : 1"></label>' +
         '<button id="btnStockSave" class="btn-main" type="submit">Enregistrer</button></form>' +
         '<div id="stockTable" style="margin-top:10px;overflow-x:auto"></div>' +
         '</div>' +
@@ -356,10 +354,10 @@
       var r = e.target.closest('[data-id]');
       if (r) T.app.openSheet(r.getAttribute('data-id'));
     });
-    T.$('#stockTeam').addEventListener('change', function () { stockTeam = this.value; var s = T.store.getStock(stockTeam); T.$('#stRecu').value = s ? s.recu : ''; T.$('#stRendu').value = s ? s.rendu : ''; T.$('#stHors').value = s && s.hors ? s.hors : ''; });
+    T.$('#stockTeam').addEventListener('change', function () { stockTeam = this.value; var s = T.store.getStock(stockTeam); T.$('#stRecu').value = s ? s.recu : ''; T.$('#stRendu').value = s ? s.rendu : ''; });
     T.$('#stockForm').addEventListener('submit', function (e) {
       e.preventDefault();
-      T.store.setStock(stockTeam, T.$('#stRecu').value, T.$('#stRendu').value, T.$('#stHors').value);
+      T.store.setStock(stockTeam, T.$('#stRecu').value, T.$('#stRendu').value);
       T.toast('Stock enregistré');
       if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
       renderStock();

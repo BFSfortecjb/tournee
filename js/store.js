@@ -452,28 +452,24 @@
     // Comptage de caisse d'une équipe : { esp: {valeur: quantité}, chq: {...}, chqOther: euros, updated }
     // Stock de calendriers d'une personne : reçus au départ, rendus (non distribués) à la fin
     getStock: function (team) { return state.stock[team] || null; },
-    setStock: function (team, recu, rendu, hors) {
-      state.stock[team] = { recu: Math.max(0, parseInt(recu, 10) || 0), rendu: Math.max(0, parseInt(rendu, 10) || 0), hors: Math.max(0, parseInt(hors, 10) || 0), updated: new Date().toISOString() };
+    setStock: function (team, recu, rendu) {
+      state.stock[team] = { recu: Math.max(0, parseInt(recu, 10) || 0), rendu: Math.max(0, parseInt(rendu, 10) || 0), updated: new Date().toISOString() };
       save();
     },
     // Bilan des calendriers par personne : reçus, vendus (contre un don), donnés, distribués, rendus, reste théorique
     calendriers: function () {
-      var f = T.store.finance(), seen = {}, rows = [], horsTot = 0;
+      var f = T.store.finance(), seen = {}, rows = [];
       Object.keys(f.team).forEach(function (t) { seen[t] = 1; });
       Object.keys(state.stock).forEach(function (t) { seen[t] = 1; });
       Object.keys(seen).sort(function (a, b) { return a.localeCompare(b, 'fr'); }).forEach(function (t) {
         var d = f.team[t] || { sold: 0, gift: 0, cs: 0, kept: 0, cal: 0 }, s = state.stock[t] || null;
-        var hors = s ? (s.hors || 0) : 0;   // donnés à un centre de secours, sans fiche d'habitation
-        horsTot += hors;
-        rows.push({ who: t, recu: s ? s.recu : null, rendu: s ? s.rendu : null, sold: d.sold, gift: d.gift, cs: d.cs + hors, hors: hors, kept: d.kept, dist: d.cal + hors,
-          reste: s ? s.recu - d.cal - hors - d.kept : null, ecart: s ? s.recu - d.cal - hors - d.kept - s.rendu : null });
+        rows.push({ who: t, recu: s ? s.recu : null, rendu: s ? s.rendu : null, sold: d.sold, gift: d.gift, cs: d.cs, kept: d.kept, dist: d.cal,
+          reste: s ? s.recu - d.cal - d.kept : null, ecart: s ? s.recu - d.cal - d.kept - s.rendu : null });
       });
       // Calendriers gratuits par motif (tous confondus)
       var motifs = {};
       state.houses.forEach(function (h) { if (h.pay === 'gratuit') { var m = h.motif || '(motif non précisé)'; motifs[m] = (motifs[m] || 0) + calOf(h); } });
-      var all = Object.assign({}, f.all); all.cs = (all.cs || 0) + horsTot;
-      if (horsTot) motifs['Donnés à un centre de secours (sans fiche)'] = horsTot;
-      return { rows: rows, all: all, motifs: motifs };
+      return { rows: rows, all: f.all, motifs: motifs };
     },
     // Un comptage par personne et par jour : clé « identifiant|AAAA-MM-JJ »
     today: today,
